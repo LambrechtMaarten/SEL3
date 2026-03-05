@@ -6,7 +6,7 @@ import jax
 from flax import struct
 from jax import numpy as jnp
 
-from src.env import environment_configuration, morphology_specification
+from src.env import environment_configuration, morphology_configuration
 from src.numerical_analysis import euler_solver, rk4_solver
 
 
@@ -220,9 +220,14 @@ def create_cpg() -> CPG:
 def map_cpg_outputs_to_actions(
         cpg_state: CPGState
 ) -> jnp.ndarray:
-    num_arms = morphology_specification.number_of_arms
+    """
+
+    :param cpg_state: state of the cpg
+    :return: list of actions
+    """
+    num_arms = morphology_configuration.number_of_arms
     num_oscillators_per_arm = 2
-    num_segments_per_arm = morphology_specification.number_of_segments_per_arm[0]
+    num_segments_per_arm = morphology_configuration.number_of_segments_per_arm[0]
 
     cpg_outputs_per_arm = cpg_state.outputs.reshape((num_arms, num_oscillators_per_arm))
     cpg_outputs_per_segment = cpg_outputs_per_arm.repeat(num_segments_per_arm, axis=0)
