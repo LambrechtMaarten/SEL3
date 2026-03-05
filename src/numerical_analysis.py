@@ -1,15 +1,17 @@
 from abc import abstractmethod, ABC
 from typing import Callable
 
+from dm_env.specs import Array
+
 
 class DifferentialEquationSolver(ABC):
     @abstractmethod
     def solve(self,
               current_time: float,
-              y: float,
-              derivative_fn: Callable[[float, float], float],
+              y: float | Array,
+              derivative_fn: Callable[[float, float], float] | Callable[[float, Array], Array],
               delta_time: float
-              ) -> float:
+              ) -> float | Array:
         pass
 
 
