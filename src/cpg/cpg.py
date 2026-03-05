@@ -28,10 +28,11 @@ class CPGState:
     offset_goals: jarr  # (X)
     coupled_phase_biases: jarr  # (b)
 
-    def modulate_random(self):
-        amplitude_goals = jax.random.normal(jax.random.PRNGKey(3), self.amplitude_goals.shape)
-        offset_goals = jax.random.normal(jax.random.PRNGKey(1), self.offset_goals.shape)
-        coupled_phase_biases = jax.random.normal(jax.random.PRNGKey(5), self.coupled_phase_biases.shape)
+    def modulate_random(self, rng=jax.random.PRNGKey(0)):
+        ra, rb, rc = jax.random.split(rng, 3)
+        amplitude_goals = jax.random.normal(ra, self.amplitude_goals.shape)
+        offset_goals = jax.random.normal(rb, self.offset_goals.shape)
+        coupled_phase_biases = jax.random.normal(rc, self.coupled_phase_biases.shape)
         frequency = jnp.pi
         return self.modulate(amplitude_goals, offset_goals, coupled_phase_biases, frequency)
 
@@ -44,14 +45,19 @@ class CPGState:
 
 
 class CPG:
-    def __init__(self, adjacency_matrix: jarr, env: Environment ,solver: DifferentialEquationSolver = EulerSolver()) -> None:
+    def __init__(self, adjacency_matrix: jarr, env: Environment,
+                 solver: DifferentialEquationSolver = EulerSolver()) -> None:
         self._adjacency_matrix = adjacency_matrix
         self._dt = env.environment_configuration.control_timestep
+        self._solver = solver
 
         self._amplitude_gain = 1
         self._offset_gain = 1
 
-        self._solver = solver
+        self.state: CPGState = self.reset()
+
+    def set_state(self, state: CPGState):
+        self.state = state
 
     @property
     def num_oscillators(self) -> int:
@@ -95,8 +101,10 @@ class CPG:
         )
 
     @functools.partial(jax.jit, static_argnums=(0,))
-    def step(self, state: CPGState) -> CPGState:
-        # Update phase
+    def step(self, state: CPGState = None) -> CPGState:
+        if state is None:
+            state = self.state
+
         def step(y, dy):
             return self._solver.solve(current_time=state.time, y=y, delta_time=self._dt, derivative_fn=dy)
 
@@ -125,8 +133,9 @@ class CPG:
         )
 
         next_outputs = next_offsets + next_amplitudes * jnp.cos(next_phases)
+
         # noinspection PyUnresolvedReferences
-        return state.replace(
+        self.state = state.replace(
             phases=next_phases,
             d_amplitudes=next_d_amplitudes,
             amplitudes=next_amplitudes,
@@ -135,3 +144,17 @@ class CPG:
             outputs=next_outputs,
             time=state.time + self._dt
         )
+        return self.state
+
+    # todo verwijderen
+    # amplitude_goals = jnp.ones(10).at[1::2].set(.2)
+    # offset_goals = jnp.zeros(10)
+    # coupled_phase_biases = jnp.zeros((10, 10))
+    # for i in range(10):
+    #     for j in range(10):
+    #         if i == j - 1:
+    #             coupled_phase_biases = coupled_phase_biases.at[i, j].set(-jnp.pi)
+    #         if i == j + 1:
+    #             coupled_phase_biases = coupled_phase_biases.at[i, j].set(jnp.pi + i / 10)
+    # frequency = jnp.pi
+    # cpg_state = cpg_state.modulate(amplitude_goals, offset_goals, coupled_phase_biases, frequency)
