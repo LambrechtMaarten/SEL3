@@ -5,12 +5,14 @@ from biorobot.brittle_star.environment.undirected_locomotion.shared import \
 from biorobot.brittle_star.mjcf.arena.aquarium import MJCFAquariumArena, AquariumArenaConfiguration
 from biorobot.brittle_star.mjcf.morphology.morphology import MJCFBrittleStarMorphology
 from biorobot.brittle_star.mjcf.morphology.specification.default import default_brittle_star_morphology_specification
+from biorobot.brittle_star.mjcf.morphology.specification.specification import BrittleStarMorphologySpecification
 
 from src.render import post_render
 
 class Environment:
 
-    def __init__(self, env_conf, arena_conf, morph_conf):
+    def __init__(self, conf_tuple):
+        env_conf, arena_conf, morph_conf = conf_tuple
         self.env = BrittleStarUndirectedLocomotionEnvironment.from_morphology_and_arena(
             morphology=(MJCFBrittleStarMorphology(specification=morph_conf)),
             arena=(MJCFAquariumArena(configuration=arena_conf)),
@@ -22,9 +24,9 @@ class Environment:
         self.state = self._reset(rng=jax.random.PRNGKey(seed=0))
         self.action_space = self.env.action_space
 
-        self.environment_configuration = env_conf
+        self.environment_configuration: BrittleStarUndirectedLocomotionEnvironmentConfiguration = env_conf
         self.arena_configuration = arena_conf
-        self.morphology_configuration = morph_conf
+        self.morphology_configuration: BrittleStarMorphologySpecification = morph_conf
 
     def step(self, action, state=None):
         if state is None:
