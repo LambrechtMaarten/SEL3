@@ -2,3 +2,4 @@
 .venv/
 output/
 src/__pycache__/
+configs/__pycache__/

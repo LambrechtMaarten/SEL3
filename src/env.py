@@ -8,27 +8,9 @@ from biorobot.brittle_star.mjcf.morphology.specification.default import default_
 
 from src.render import post_render
 
-environment_configuration = BrittleStarUndirectedLocomotionEnvironmentConfiguration(
-    joint_randomization_noise_scale=0.0,
-    render_mode="rgb_array",
-    simulation_time=10,
-    num_physics_steps_per_control_step=10,
-    time_scale=2,
-    camera_ids=[0, 1],
-    render_size=(480, 640)
-)
-arena_configuration = AquariumArenaConfiguration(
-    size=(10, 5), sand_ground_color=False, attach_target=False, wall_height=1.5, wall_thickness=0.1
-)
-morphology_configuration = default_brittle_star_morphology_specification(
-    num_arms=5, num_segments_per_arm=3, use_p_control=True, use_torque_control=False
-)
-
 class Environment:
 
-    def __init__(self):
-        env_conf, arena_conf, morph_conf = environment_configuration, arena_configuration, morphology_configuration
-
+    def __init__(self, env_conf, arena_conf, morph_conf):
         self.env = BrittleStarUndirectedLocomotionEnvironment.from_morphology_and_arena(
             morphology=(MJCFBrittleStarMorphology(specification=morph_conf)),
             arena=(MJCFAquariumArena(configuration=arena_conf)),
