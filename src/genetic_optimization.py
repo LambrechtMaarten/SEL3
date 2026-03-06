@@ -55,13 +55,14 @@ def visualize():
 class GeneticOptimizer(ABC):
     def __init__(self, evaluator: Callable[[jarr], float | jarr], population_size: int, genome_size: int,
                  rng=jax.random.PRNGKey(0)):
-        self._evaluator = jax.vmap(evaluator)
+        self._evaluator = evaluator
         self._population_size = population_size
         self._genome_size = genome_size
         self.rng = rng
 
     def evaluate_population(self, population: jarr) -> jarr:
-        return self._evaluator(population)
+        # return jnp.stack([self._evaluator(genome) for genome in population])
+        return jax.vmap(self._evaluator)(population)
 
     def initialize_population(self) -> jarr:
         self.rng, _rng = jax.random.split(self.rng)

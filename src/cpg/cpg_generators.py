@@ -25,10 +25,22 @@ class CPGGenerator(ABC):
     def outputs_to_actions(self, outputs: jarr) -> jarr:
         pass
 
+    @staticmethod
+    @abstractmethod
+    def to_jarr(cpg_state: CPGState) -> jarr:
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def from_jarr(arr: jarr, cpg_state: CPGState) -> CPGState:
+        pass
+
+
 class BasicCPGGenerator(CPGGenerator):
     """
     This class has generators per arm, one "out of plane" and one "in plane" (stolen from tutorial)
     """
+
     def generate(self) -> CPG:
         ip_oscillator_indices = jnp.arange(0, 10, 2)
         oop_oscillator_indices = jnp.arange(1, 10, 2)
@@ -63,11 +75,38 @@ class BasicCPGGenerator(CPGGenerator):
         actions = cpg_outputs_per_segment.flatten()
         return actions
 
-    def modulate_cpg(self, 
-            cpg_state: CPGState,
-            leading_arm_index: int,
-            max_joint_limit: float
-    ) -> CPGState:
+    @staticmethod
+    def to_jarr(cpg_state: CPGState) -> jarr:
+        return jnp.concatenate([
+            jnp.atleast_1d(cpg_state.frequency),
+            cpg_state.amplitude_goals,
+            cpg_state.offset_goals,
+            cpg_state.coupled_phase_biases.ravel()
+        ]).flatten()
+
+    @staticmethod
+    def from_jarr(cpg_state: CPGState, arr: jarr) -> CPGState:
+        i = 0
+        frequency = arr[i:i + 1][0]
+        i += 1
+        amplitude_goals = arr[i:i + cpg_state.amplitude_goals.size]
+        i += cpg_state.amplitude_goals.size
+        offset_goals = arr[i:i + cpg_state.offset_goals.size]
+        i += cpg_state.offset_goals.size
+        coupled_phase_biases = arr[i:].reshape(cpg_state.coupled_phase_biases.shape)
+
+        return cpg_state.replace(
+            frequency=frequency,
+            amplitude_goals=amplitude_goals,
+            offset_goals=offset_goals,
+            coupled_phase_biases=coupled_phase_biases
+        )
+
+    def modulate_cpg(self,
+                     cpg_state: CPGState,
+                     leading_arm_index: int,
+                     max_joint_limit: float
+                     ) -> CPGState:
         def get_oscillator_indices_for_arm(
                 arm_index: int
         ) -> Tuple[int, int]:
@@ -145,10 +184,12 @@ class BasicCPGGenerator(CPGGenerator):
             frequency=jnp.pi,
         )
 
+
 class FullyConnecyedCPGGenerator(CPGGenerator):
     """
     This class has 2 generators per motor
     """
+
     def generate(self) -> CPG:
         ip_oscillator_indices = jnp.arange(0, 10, 2)
         oop_oscillator_indices = jnp.arange(1, 10, 2)
