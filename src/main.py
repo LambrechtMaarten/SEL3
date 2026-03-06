@@ -13,13 +13,14 @@ def main():
 
     basic_cpg_generator = BasicCPGGenerator(env)
     cpg = basic_cpg_generator.generate()
-    cpg.set_state(cpg.state.modulate_random(jax.random.PRNGKey(0)))
+    cpg.set_state(basic_cpg_generator.modulate_cpg(cpg.reset(), 0, env.action_space.high[0]*.25))
 
     frames = []
     env_state = env.reset()
     while not (env_state.terminated | env_state.truncated):
         actions = basic_cpg_generator.outputs_to_actions(cpg.step().outputs)
         env_state = env.step(actions)
+        jax.debug.print("d2 {x}", x=env_state.reward)
         frames.append(env.render())
 
     save_video(frames, "../output/video.mp4")

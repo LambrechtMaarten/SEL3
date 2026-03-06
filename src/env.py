@@ -6,6 +6,7 @@ from biorobot.brittle_star.mjcf.arena.aquarium import MJCFAquariumArena, Aquariu
 from biorobot.brittle_star.mjcf.morphology.morphology import MJCFBrittleStarMorphology
 from biorobot.brittle_star.mjcf.morphology.specification.default import default_brittle_star_morphology_specification
 from biorobot.brittle_star.mjcf.morphology.specification.specification import BrittleStarMorphologySpecification
+from moojoco.environment.base import BaseEnvState
 
 from src.render import post_render
 
@@ -21,7 +22,7 @@ class Environment:
         self._step = jax.jit(self.env.step)
         self._reset = jax.jit(self.env.reset)
 
-        self.state = self._reset(rng=jax.random.PRNGKey(seed=0))
+        self.state: BaseEnvState = self._reset(rng=jax.random.PRNGKey(seed=0))
         self.action_space = self.env.action_space
 
         self.environment_configuration: BrittleStarUndirectedLocomotionEnvironmentConfiguration = env_conf

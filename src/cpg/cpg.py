@@ -51,8 +51,8 @@ class CPG:
         self._dt = env.environment_configuration.control_timestep
         self._solver = solver
 
-        self._amplitude_gain = 1
-        self._offset_gain = 1
+        self._amplitude_gain = 20
+        self._offset_gain = 20
 
         self.state: CPGState = self.reset()
 
@@ -65,13 +65,11 @@ class CPG:
 
     @staticmethod
     def phase_de(weights: jarr, amplitudes: jarr, phases: jarr, phase_biases: jarr, frequency: float) -> jarr:  # F'
-        print(weights.shape, amplitudes.shape, phases.shape, phase_biases.shape)
-
         @jax.vmap
         def sine_term(phase_i: float | jarr, phase_biases_i: float | jarr) -> jarr:
             return jnp.sin(phases - phase_i - phase_biases_i)
 
-        return frequency + jnp.sum(weights * amplitudes * sine_term(phase_i=phases, phase_biases_i=phase_biases))
+        return frequency + jnp.sum(weights * amplitudes * sine_term(phase_i=phases, phase_biases_i=phase_biases), axis=1)
 
     @staticmethod
     def second_order_de(gain: float, modulator: jarr, values: jarr, dot_values: jarr) -> jarr:
@@ -100,7 +98,6 @@ class CPG:
             coupled_phase_biases=jnp.zeros_like(self._adjacency_matrix)
         )
 
-    @functools.partial(jax.jit, static_argnums=(0,))
     def step(self, state: CPGState = None) -> CPGState:
         if state is None:
             state = self.state
