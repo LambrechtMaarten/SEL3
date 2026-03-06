@@ -15,7 +15,7 @@ def save_video(
 def post_render(
         render_output: List[np.ndarray],
         environment_configuration: MuJoCoEnvironmentConfiguration
-) -> np.ndarray:
+) -> np.ndarray | None:
     if render_output is None:
         # Temporary workaround until https://github.com/google-deepmind/mujoco/issues/1379 is fixed
         return None

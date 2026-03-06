@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, List
 
-import jax
 import jax.numpy as jnp
+
+from configs.config import Configuration
 from src.cpg.cpg import CPG, CPGState
-from src.env import Environment
 from src.jax_extra import jarr
+from src.numerical_analysis import RK4Solver, EulerSolver
 
 
 class CPGGenerator(ABC):
@@ -14,8 +15,11 @@ class CPGGenerator(ABC):
     instance determines which generators map to which motors
     """
 
-    def __init__(self, env: Environment):
-        self.env = env
+    def __init__(self):
+        self.configuration: Configuration | None = None
+
+    def set_configuration(self, configuration: Configuration):
+        self.configuration = configuration
 
     @abstractmethod
     def generate(self) -> CPG:
@@ -23,16 +27,6 @@ class CPGGenerator(ABC):
 
     @abstractmethod
     def outputs_to_actions(self, outputs: jarr) -> jarr:
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def to_jarr(cpg_state: CPGState) -> jarr:
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def from_jarr(arr: jarr, cpg_state: CPGState) -> CPGState:
         pass
 
 
@@ -62,12 +56,12 @@ class BasicCPGGenerator(CPGGenerator):
         # Make adjacency matrix symmetric (i.e. make all connections bi-directional)
         adjacency_matrix = jnp.maximum(adjacency_matrix, adjacency_matrix.T)
 
-        return CPG(5 * adjacency_matrix, self.env)
+        return CPG(5 * adjacency_matrix, self.configuration, EulerSolver())
 
     def outputs_to_actions(self, outputs: jarr) -> jarr:
-        num_arms = self.env.morphology_configuration.number_of_arms
+        num_arms = self.configuration.simulation.morphology_configuration.number_of_arms
         num_oscillators_per_arm = 2
-        num_segments_per_arm = self.env.morphology_configuration.number_of_segments_per_arm[0]
+        num_segments_per_arm = self.configuration.simulation.morphology_configuration.number_of_segments_per_arm[0]
 
         cpg_outputs_per_arm = outputs.reshape((num_arms, num_oscillators_per_arm))
         cpg_outputs_per_segment = cpg_outputs_per_arm.repeat(num_segments_per_arm, axis=0)
@@ -76,37 +70,10 @@ class BasicCPGGenerator(CPGGenerator):
         return actions
 
     @staticmethod
-    def to_jarr(cpg_state: CPGState) -> jarr:
-        return jnp.concatenate([
-            jnp.atleast_1d(cpg_state.frequency),
-            cpg_state.amplitude_goals,
-            cpg_state.offset_goals,
-            cpg_state.coupled_phase_biases.ravel()
-        ]).flatten()
-
-    @staticmethod
-    def from_jarr(cpg_state: CPGState, arr: jarr) -> CPGState:
-        i = 0
-        frequency = arr[i:i + 1][0]
-        i += 1
-        amplitude_goals = arr[i:i + cpg_state.amplitude_goals.size]
-        i += cpg_state.amplitude_goals.size
-        offset_goals = arr[i:i + cpg_state.offset_goals.size]
-        i += cpg_state.offset_goals.size
-        coupled_phase_biases = arr[i:].reshape(cpg_state.coupled_phase_biases.shape)
-
-        return cpg_state.replace(
-            frequency=frequency,
-            amplitude_goals=amplitude_goals,
-            offset_goals=offset_goals,
-            coupled_phase_biases=coupled_phase_biases
-        )
-
-    def modulate_cpg(self,
-                     cpg_state: CPGState,
-                     leading_arm_index: int,
-                     max_joint_limit: float
-                     ) -> CPGState:
+    def modulate_cpg(
+            cpg_state: CPGState,
+            leading_arm_index: int,
+            max_joint_limit: float) -> CPGState:
         def get_oscillator_indices_for_arm(
                 arm_index: int
         ) -> Tuple[int, int]:
@@ -191,35 +158,12 @@ class FullyConnecyedCPGGenerator(CPGGenerator):
     """
 
     def generate(self) -> CPG:
-        ip_oscillator_indices = jnp.arange(0, 10, 2)
-        oop_oscillator_indices = jnp.arange(1, 10, 2)
+        morphology = self.configuration.simulation.morphology_configuration
+        adjacency_matrix = jnp.ones((
+            2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0],
+            2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0]))
 
-        adjacency_matrix = jnp.zeros((10, 10))
-        # Connect oscillators within an arm
-        adjacency_matrix = adjacency_matrix.at[ip_oscillator_indices, oop_oscillator_indices].set(1)
-        # Connect IP oscillators of neighbouring arms
-        adjacency_matrix = adjacency_matrix.at[
-            ip_oscillator_indices, jnp.concatenate(
-                (ip_oscillator_indices[1:], jnp.array([ip_oscillator_indices[0]])))].set(
-            1
-        )
-        # Connect OOP oscillators of neighbouring arms
-        adjacency_matrix = adjacency_matrix.at[oop_oscillator_indices, jnp.concatenate(
-            (oop_oscillator_indices[1:], jnp.array([oop_oscillator_indices[0]]))
-        )].set(1)
-
-        # Make adjacency matrix symmetric (i.e. make all connections bi-directional)
-        adjacency_matrix = jnp.maximum(adjacency_matrix, adjacency_matrix.T)
-
-        return CPG(1 * adjacency_matrix, self.env)
+        return CPG(1 * adjacency_matrix, self.configuration)
 
     def outputs_to_actions(self, outputs: jarr) -> jarr:
-        num_arms = self.env.morphology_configuration.number_of_arms
-        num_oscillators_per_arm = 2
-        num_segments_per_arm = self.env.morphology_configuration.number_of_segments_per_arm[0]
-
-        cpg_outputs_per_arm = outputs.reshape((num_arms, num_oscillators_per_arm))
-        cpg_outputs_per_segment = cpg_outputs_per_arm.repeat(num_segments_per_arm, axis=0)
-
-        actions = cpg_outputs_per_segment.flatten()
-        return actions
+        return outputs

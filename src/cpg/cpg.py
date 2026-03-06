@@ -5,6 +5,7 @@ from flax import struct
 from flax.typing import Shape
 from jax import numpy as jnp
 
+from configs.config import Configuration
 from src.env import Environment
 from src.jax_extra import jarr
 from src.numerical_analysis import EulerSolver, DifferentialEquationSolver
@@ -46,7 +47,32 @@ class CPGState:
             coupled_phase_biases=jnp.zeros(phase_biases_shape)
         )
 
-    def modulate_random(self, rng=jax.random.PRNGKey(0)):
+    def to_jarr(self) -> jarr:
+        return jnp.concatenate([
+            jnp.atleast_1d(self.frequency),
+            self.amplitude_goals,
+            self.offset_goals,
+            self.coupled_phase_biases.ravel()
+        ]).flatten()
+
+    def from_jarr(self, arr: jarr):
+        i = 0
+        frequency = arr[i:i + 1][0]
+        i += 1
+        amplitude_goals = arr[i:i + self.amplitude_goals.size]
+        i += self.amplitude_goals.size
+        offset_goals = arr[i:i + self.offset_goals.size]
+        i += self.offset_goals.size
+        coupled_phase_biases = arr[i:].reshape(self.coupled_phase_biases.shape)
+
+        return self.replace(
+            frequency=frequency,
+            amplitude_goals=amplitude_goals,
+            offset_goals=offset_goals,
+            coupled_phase_biases=coupled_phase_biases
+        )
+
+    def modulate_random(self, rng):
         ra, rb, rc = jax.random.split(rng, 3)
         amplitude_goals = jax.random.normal(ra, self.amplitude_goals.shape)
         offset_goals = jax.random.normal(rb, self.offset_goals.shape)
@@ -63,10 +89,10 @@ class CPGState:
 
 
 class CPG:
-    def __init__(self, adjacency_matrix: jarr, env: Environment,
+    def __init__(self, adjacency_matrix: jarr, conf: Configuration,
                  solver: DifferentialEquationSolver = EulerSolver()) -> None:
         self._adjacency_matrix = adjacency_matrix
-        self._dt = env.environment_configuration.control_timestep
+        self._dt = conf.simulation.environment_configuration.control_timestep
         self._solver = solver
 
         self._amplitude_gain = 20
