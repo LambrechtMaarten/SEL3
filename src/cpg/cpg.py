@@ -32,7 +32,6 @@ class CPGState:
 
     @staticmethod
     def reset(num_oscilators: int, phase_biases_shape: Shape):
-
         return CPGState(
             time=0.0,
             frequency=0.0,
@@ -89,19 +88,13 @@ class CPGState:
 
 
 class CPG:
-    def __init__(self, adjacency_matrix: jarr, conf: Configuration,
-                 solver: DifferentialEquationSolver = EulerSolver()) -> None:
+    def __init__(self, adjacency_matrix: jarr, conf: Configuration, solver: DifferentialEquationSolver = EulerSolver()):
         self._adjacency_matrix = adjacency_matrix
         self._dt = conf.simulation.environment_configuration.control_timestep
         self._solver = solver
 
         self._amplitude_gain = 20
         self._offset_gain = 20
-
-        self.state: CPGState = self.reset()
-
-    def set_state(self, state: CPGState):
-        self.state = state
 
     @property
     def num_oscillators(self) -> int:
@@ -129,13 +122,9 @@ class CPG:
         Creates a new CPG state with everything set to 0
         :return: empty CPG state
         """
-        self.state = CPGState.reset(self.num_oscillators, self._adjacency_matrix.shape)
-        return self.state
+        return CPGState.reset(self.num_oscillators, self._adjacency_matrix.shape)
 
-    def step(self, state: CPGState = None) -> CPGState:
-        if state is None:
-            state = self.state
-
+    def step(self, state: CPGState) -> CPGState:
         def step(y, dy):
             return self._solver.solve(current_time=state.time, y=y, delta_time=self._dt, derivative_fn=dy)
 
@@ -166,7 +155,7 @@ class CPG:
         next_outputs = next_offsets + next_amplitudes * jnp.cos(next_phases)
 
         # noinspection PyUnresolvedReferences
-        self.state = state.replace(
+        return state.replace(
             phases=next_phases,
             d_amplitudes=next_d_amplitudes,
             amplitudes=next_amplitudes,
@@ -175,17 +164,3 @@ class CPG:
             outputs=next_outputs,
             time=state.time + self._dt
         )
-        return self.state
-
-    # todo verwijderen
-    # amplitude_goals = jnp.ones(10).at[1::2].set(.2)
-    # offset_goals = jnp.zeros(10)
-    # coupled_phase_biases = jnp.zeros((10, 10))
-    # for i in range(10):
-    #     for j in range(10):
-    #         if i == j - 1:
-    #             coupled_phase_biases = coupled_phase_biases.at[i, j].set(-jnp.pi)
-    #         if i == j + 1:
-    #             coupled_phase_biases = coupled_phase_biases.at[i, j].set(jnp.pi + i / 10)
-    # frequency = jnp.pi
-    # cpg_state = cpg_state.modulate(amplitude_goals, offset_goals, coupled_phase_biases, frequency)

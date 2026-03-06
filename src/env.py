@@ -31,22 +31,15 @@ class Environment:
         self.arena_configuration = simulation_configuration.arena_configuration
         self.morphology_configuration: BrittleStarMorphologySpecification = simulation_configuration.morphology_configuration
 
-        self.state: BaseEnvState = self._reset(self.configuration.random.split())
         self.action_space = self.env.action_space
 
-    def step(self, action, state=None) -> BaseEnvState:
-        if state is None:
-            state = self.state
-        self.state = self._step(action=action, state=state)
-        return self.state
+    def step(self, action, state) -> BaseEnvState:
+        return self._step(action=action, state=state)
 
     def reset(self, rng=None):
         if rng is None:
             rng = self.configuration.random.split()
-        self.state = self._reset(rng=rng)
-        return self.state
+        return self._reset(rng=rng)
 
-    def render(self, state=None):
-        if state is None:
-            state = self.state
+    def render(self, state):
         return post_render(self.env.render(state=state), self.environment_configuration)

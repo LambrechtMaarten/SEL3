@@ -152,7 +152,7 @@ class BasicCPGGenerator(CPGGenerator):
         )
 
 
-class FullyConnecyedCPGGenerator(CPGGenerator):
+class FullyConnectedCPGGenerator(CPGGenerator):
     """
     This class has 2 generators per motor
     """

@@ -26,7 +26,7 @@ standard = SimulationConfiguration(
     BrittleStarUndirectedLocomotionEnvironmentConfiguration(
         joint_randomization_noise_scale=0.0,
         render_mode="rgb_array",
-        simulation_time=4,
+        simulation_time=20,
         num_physics_steps_per_control_step=10,
         time_scale=2,
         camera_ids=[0, 1],
