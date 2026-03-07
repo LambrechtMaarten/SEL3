@@ -1,14 +1,10 @@
-import functools
-
 import jax
 from flax import struct
 from flax.typing import Shape
 from jax import numpy as jnp
 
 from configs.config import Configuration
-from src.env import Environment
 from src.jax_extra import jarr
-from src.numerical_analysis import EulerSolver, DifferentialEquationSolver
 
 
 # T_i = x_i + r_i * cos(F_i) = output
@@ -64,6 +60,7 @@ class CPGState:
         i += self.offset_goals.size
         coupled_phase_biases = arr[i:].reshape(self.coupled_phase_biases.shape)
 
+        # noinspection PyUnresolvedReferences
         return self.replace(
             frequency=frequency,
             amplitude_goals=amplitude_goals,
@@ -79,19 +76,21 @@ class CPGState:
         frequency = jnp.pi
         return self.modulate(amplitude_goals, offset_goals, coupled_phase_biases, frequency)
 
-    def modulate(self, amplitude_goals: jarr, offset_goals: jarr, coupled_phase_biases: jarr,
-                 frequency: float):
+    def modulate(self, amplitude_goals: jarr, offset_goals: jarr, coupled_phase_biases: jarr, frequency: float):
+        # noinspection PyUnresolvedReferences
         return self.replace(
-            amplitude_goals=amplitude_goals, offset_goals=offset_goals, coupled_phase_biases=coupled_phase_biases,
+            amplitude_goals=amplitude_goals,
+            offset_goals=offset_goals,
+            coupled_phase_biases=coupled_phase_biases,
             frequency=frequency
         )
 
 
 class CPG:
-    def __init__(self, adjacency_matrix: jarr, conf: Configuration, solver: DifferentialEquationSolver = EulerSolver()):
+    def __init__(self, adjacency_matrix: jarr, configuration: Configuration):
         self._adjacency_matrix = adjacency_matrix
-        self._dt = conf.simulation.environment_configuration.control_timestep
-        self._solver = solver
+        self._dt = configuration.simulation.environment_configuration.control_timestep
+        self._solver = configuration.simulation.solver
 
         self._amplitude_gain = 20
         self._offset_gain = 20
@@ -99,23 +98,6 @@ class CPG:
     @property
     def num_oscillators(self) -> int:
         return self._adjacency_matrix.shape[0]
-
-    @staticmethod
-    def phase_de(weights: jarr, amplitudes: jarr, phases: jarr, phase_biases: jarr, frequency: float) -> jarr:  # F'
-        @jax.vmap
-        def sine_term(phase_i: float | jarr, phase_biases_i: float | jarr) -> jarr:
-            return jnp.sin(phases - phase_i - phase_biases_i)
-
-        return frequency + jnp.sum(weights * amplitudes * sine_term(phase_i=phases, phase_biases_i=phase_biases),
-                                   axis=1)
-
-    @staticmethod
-    def second_order_de(gain: float, modulator: jarr, values: jarr, dot_values: jarr) -> jarr:
-        return gain * ((gain / 4) * (modulator - values) - dot_values)
-
-    @staticmethod
-    def first_order_de(dot_values: jarr) -> jarr:
-        return dot_values
 
     def reset(self) -> CPGState:
         """
@@ -125,31 +107,42 @@ class CPG:
         return CPGState.reset(self.num_oscillators, self._adjacency_matrix.shape)
 
     def step(self, state: CPGState) -> CPGState:
-        def step(y, dy):
+        second_order_de = lambda gain, modulator, values, dot_values: \
+            gain * ((gain / 4) * (modulator - values) - dot_values)
+        first_order_de = lambda dot_values: \
+            dot_values
+        phase_de = lambda weights, amplitudes, phases, phase_biases, frequency: \
+            frequency + jnp.sum(
+                weights *
+                amplitudes *
+                jax.vmap(lambda fi_i, rho_i: jnp.sin(phases - fi_i - rho_i))(phases, phase_biases),
+                axis=1)
+
+        def _step(y, dy):
             return self._solver.solve(current_time=state.time, y=y, delta_time=self._dt, derivative_fn=dy)
 
-        next_phases = step(
+        next_phases = _step(
             state.phases,
-            lambda t, y: self.phase_de(frequency=state.frequency, amplitudes=state.amplitudes, phases=y,
-                                       phase_biases=state.coupled_phase_biases, weights=self._adjacency_matrix)
+            lambda t, y: phase_de(frequency=state.frequency, amplitudes=state.amplitudes, phases=y,
+                                  phase_biases=state.coupled_phase_biases, weights=self._adjacency_matrix)
         )
-        next_d_amplitudes = step(
+        next_d_amplitudes = _step(
             state.d_amplitudes,
-            lambda t, y: self.second_order_de(gain=self._amplitude_gain, modulator=state.amplitude_goals,
-                                              values=state.amplitudes, dot_values=y)
+            lambda t, y: second_order_de(gain=self._amplitude_gain, modulator=state.amplitude_goals,
+                                         values=state.amplitudes, dot_values=y)
         )
-        next_d_offsets = step(
+        next_d_offsets = _step(
             state.d_offsets,
-            lambda t, y: self.second_order_de(gain=self._offset_gain, modulator=state.offset_goals,
-                                              values=state.offsets, dot_values=y)
+            lambda t, y: second_order_de(gain=self._offset_gain, modulator=state.offset_goals,
+                                         values=state.offsets, dot_values=y)
         )
-        next_amplitudes = step(
+        next_amplitudes = _step(
             state.amplitudes,
-            lambda t, y: self.first_order_de(dot_values=state.d_amplitudes)
+            lambda t, y: first_order_de(dot_values=state.d_amplitudes)
         )
-        next_offsets = step(
+        next_offsets = _step(
             state.offsets,
-            lambda t, y: self.first_order_de(dot_values=state.d_offsets)
+            lambda t, y: first_order_de(dot_values=state.d_offsets)
         )
 
         next_outputs = next_offsets + next_amplitudes * jnp.cos(next_phases)

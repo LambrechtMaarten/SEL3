@@ -1,11 +1,7 @@
 import jax
 from biorobot.brittle_star.environment.undirected_locomotion.dual import BrittleStarUndirectedLocomotionEnvironment
-from biorobot.brittle_star.environment.undirected_locomotion.shared import \
-    BrittleStarUndirectedLocomotionEnvironmentConfiguration
-from biorobot.brittle_star.mjcf.arena.aquarium import MJCFAquariumArena, AquariumArenaConfiguration
+from biorobot.brittle_star.mjcf.arena.aquarium import MJCFAquariumArena
 from biorobot.brittle_star.mjcf.morphology.morphology import MJCFBrittleStarMorphology
-from biorobot.brittle_star.mjcf.morphology.specification.default import default_brittle_star_morphology_specification
-from biorobot.brittle_star.mjcf.morphology.specification.specification import BrittleStarMorphologySpecification
 from moojoco.environment.base import BaseEnvState
 
 from configs.config import Configuration
@@ -15,21 +11,15 @@ from src.render import post_render
 class Environment:
 
     def __init__(self, configuration: Configuration):
-        simulation_configuration = configuration.simulation
-        self.env = BrittleStarUndirectedLocomotionEnvironment.from_morphology_and_arena(
-            (MJCFBrittleStarMorphology(simulation_configuration.morphology_configuration)),
-            (MJCFAquariumArena(simulation_configuration.arena_configuration)),
-            simulation_configuration.environment_configuration,
-            backend="MJX"
-        )
+        self.configuration: Configuration = configuration
 
+        self.env = BrittleStarUndirectedLocomotionEnvironment.from_morphology_and_arena(
+            (MJCFBrittleStarMorphology(self.configuration.simulation.morphology_configuration)),
+            (MJCFAquariumArena(self.configuration.simulation.arena_configuration)),
+            self.configuration.simulation.environment_configuration,
+            backend="MJX")
         self._step = jax.jit(self.env.step)
         self._reset = jax.jit(self.env.reset)
-
-        self.configuration = configuration
-        self.environment_configuration: BrittleStarUndirectedLocomotionEnvironmentConfiguration = simulation_configuration.environment_configuration
-        self.arena_configuration = simulation_configuration.arena_configuration
-        self.morphology_configuration: BrittleStarMorphologySpecification = simulation_configuration.morphology_configuration
 
         self.action_space = self.env.action_space
 
@@ -42,4 +32,4 @@ class Environment:
         return self._reset(rng=rng)
 
     def render(self, state):
-        return post_render(self.env.render(state=state), self.environment_configuration)
+        return post_render(self.env.render(state=state), self.configuration.simulation.environment_configuration)

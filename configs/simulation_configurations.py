@@ -6,23 +6,27 @@ from biorobot.brittle_star.mjcf.morphology.specification.specification import Br
 from moojoco.mjcf.arena import ArenaConfiguration
 
 from configs.subconfiguration import SubConfiguration
+from src.numerical_analysis import DifferentialEquationSolver, EulerSolver
 
 
 class SimulationConfiguration(SubConfiguration):
     def __init__(
             self,
             name: str,
+            solver: DifferentialEquationSolver,
             environment_configuration: BrittleStarUndirectedLocomotionEnvironmentConfiguration,
             arena_configuration: ArenaConfiguration,
             morphology_configuration: BrittleStarMorphologySpecification):
         super().__init__(name)
+        self.solver = solver
         self.environment_configuration = environment_configuration
         self.arena_configuration = arena_configuration
         self.morphology_configuration = morphology_configuration
 
 
-standard = SimulationConfiguration(
+standard = lambda: SimulationConfiguration(
     "standard",
+    EulerSolver(),
     BrittleStarUndirectedLocomotionEnvironmentConfiguration(
         joint_randomization_noise_scale=0.0,
         render_mode="rgb_array",
@@ -37,5 +41,5 @@ standard = SimulationConfiguration(
     ),
     default_brittle_star_morphology_specification(
         num_arms=5, num_segments_per_arm=3, use_p_control=True, use_torque_control=False
-    )
+    ),
 )

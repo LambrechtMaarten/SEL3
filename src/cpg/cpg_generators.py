@@ -6,27 +6,19 @@ import jax.numpy as jnp
 from configs.config import Configuration
 from src.cpg.cpg import CPG, CPGState
 from src.jax_extra import jarr
-from src.numerical_analysis import RK4Solver, EulerSolver
 
 
 class CPGGenerator(ABC):
     """
-    This class contains the functions to generate a CPG and to then transform its output into actions, so an
-    instance determines which generators map to which motors
+    This class represents a specific CPG configuration, specifying how oscilators map to actuarors
     """
 
-    def __init__(self):
-        self.configuration: Configuration | None = None
-
-    def set_configuration(self, configuration: Configuration):
-        self.configuration = configuration
-
     @abstractmethod
-    def generate(self) -> CPG:
+    def generate(self, configuration: Configuration) -> CPG:
         pass
 
     @abstractmethod
-    def outputs_to_actions(self, outputs: jarr) -> jarr:
+    def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
         pass
 
 
@@ -35,7 +27,7 @@ class BasicCPGGenerator(CPGGenerator):
     This class has generators per arm, one "out of plane" and one "in plane" (stolen from tutorial)
     """
 
-    def generate(self) -> CPG:
+    def generate(self, configuration: Configuration) -> CPG:
         ip_oscillator_indices = jnp.arange(0, 10, 2)
         oop_oscillator_indices = jnp.arange(1, 10, 2)
 
@@ -56,12 +48,12 @@ class BasicCPGGenerator(CPGGenerator):
         # Make adjacency matrix symmetric (i.e. make all connections bi-directional)
         adjacency_matrix = jnp.maximum(adjacency_matrix, adjacency_matrix.T)
 
-        return CPG(5 * adjacency_matrix, self.configuration, EulerSolver())
+        return CPG(5 * adjacency_matrix, configuration)
 
-    def outputs_to_actions(self, outputs: jarr) -> jarr:
-        num_arms = self.configuration.simulation.morphology_configuration.number_of_arms
+    def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
+        num_arms = configuration.simulation.morphology_configuration.number_of_arms
         num_oscillators_per_arm = 2
-        num_segments_per_arm = self.configuration.simulation.morphology_configuration.number_of_segments_per_arm[0]
+        num_segments_per_arm = configuration.simulation.morphology_configuration.number_of_segments_per_arm[0]
 
         cpg_outputs_per_arm = outputs.reshape((num_arms, num_oscillators_per_arm))
         cpg_outputs_per_segment = cpg_outputs_per_arm.repeat(num_segments_per_arm, axis=0)
@@ -157,13 +149,13 @@ class FullyConnectedCPGGenerator(CPGGenerator):
     This class has 2 generators per motor
     """
 
-    def generate(self) -> CPG:
-        morphology = self.configuration.simulation.morphology_configuration
+    def generate(self, configuration: Configuration) -> CPG:
+        morphology = configuration.simulation.morphology_configuration
         adjacency_matrix = jnp.ones((
             2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0],
             2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0]))
 
-        return CPG(1 * adjacency_matrix, self.configuration)
+        return CPG(1 * adjacency_matrix, configuration)
 
-    def outputs_to_actions(self, outputs: jarr) -> jarr:
+    def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
         return outputs
