@@ -8,22 +8,23 @@ import \
     configs.simulation_configurations, \
     configs.random_configurations, \
     configs.cpg_configurations, \
-    configs.genetic_configuration
+    configs.genetic_configurations, \
+    configs.controller_configurations
 
 from configs.config import Configuration
 from src.cpg.cpg import CPG
 from src.env import Environment
 from src.jax_extra import jarr
-from src.render import save_video
 
 
 def main():
     configuration = Configuration(
-        configs.simulation_configurations.standard(),
-        configs.cpg_configurations.fully_connected(),
-        configs.random_configurations.standard(),
         configs.logger.standard(),
-        configs.genetic_configuration.standard(),
+        configs.simulation_configurations.standard(),
+        configs.cpg_configurations.standard(),
+        configs.random_configurations.standard(),
+        configs.genetic_configurations.standard(),
+        configs.controller_configurations.standard()
     )
 
     configuration.logger.log_configuration()
@@ -39,7 +40,7 @@ def main():
     genetic_optimizer = configuration.genetic.genetic_optimizer
 
     def evaluator(arr: jarr, _env: Environment, _cpg: CPG) -> jarr:
-        def _evaluator(_arr: jarr)-> jarr:
+        def _evaluator(_arr: jarr) -> jarr:
             _env_state = _env.reset()
             _cpg_state = _cpg.reset().from_jarr(_arr)
             score = 0
@@ -48,6 +49,7 @@ def main():
                 _env_state = _env.step(cpg_generator.outputs_to_actions(_cpg_state.outputs, configuration), _env_state)
                 score += _env_state.info["xy_distance_from_origin"]
             return score
+
         return jax.vmap(_evaluator)(arr)
 
     starting_population = genetic_optimizer.initialize_population(
@@ -63,9 +65,9 @@ def main():
         env,
         cpg
     )
-
     cpg_state = cpg.reset().from_jarr(selection[0])
     print(selection[0])
+
     frames = []
     env_state = env.reset()
     while not (env_state.terminated | env_state.truncated):
@@ -74,7 +76,7 @@ def main():
         env_state = env.step(actions, env_state)
         frames.append(env.render(env_state))
 
-    save_video(frames, "../output/video2.mp4")
+    configuration.logger.log_video(frames, "video.mp4")
 
 
 if __name__ == '__main__':
