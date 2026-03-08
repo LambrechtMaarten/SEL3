@@ -4,7 +4,7 @@ from biorobot.brittle_star.mjcf.arena.aquarium import MJCFAquariumArena
 from biorobot.brittle_star.mjcf.morphology.morphology import MJCFBrittleStarMorphology
 from moojoco.environment.base import BaseEnvState
 
-from configs.config import Configuration
+from configs.subcontrollers.config import Configuration
 from src.render import post_render
 
 

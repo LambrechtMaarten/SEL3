@@ -3,7 +3,7 @@ from flax import struct
 from flax.typing import Shape
 from jax import numpy as jnp
 
-from configs.config import Configuration
+from configs.subcontrollers.config import Configuration
 from src.jax_extra import jarr
 
 
@@ -40,32 +40,6 @@ class CPGState:
             amplitude_goals=jnp.zeros(num_oscilators),
             offset_goals=jnp.zeros(num_oscilators),
             coupled_phase_biases=jnp.zeros(phase_biases_shape)
-        )
-
-    def to_jarr(self) -> jarr:
-        return jnp.concatenate([
-            jnp.atleast_1d(self.frequency),
-            self.amplitude_goals,
-            self.offset_goals,
-            self.coupled_phase_biases.ravel()
-        ]).flatten()
-
-    def from_jarr(self, arr: jarr):
-        i = 0
-        frequency = arr[i:i + 1][0]
-        i += 1
-        amplitude_goals = arr[i:i + self.amplitude_goals.size]
-        i += self.amplitude_goals.size
-        offset_goals = arr[i:i + self.offset_goals.size]
-        i += self.offset_goals.size
-        coupled_phase_biases = arr[i:].reshape(self.coupled_phase_biases.shape)
-
-        # noinspection PyUnresolvedReferences
-        return self.replace(
-            frequency=frequency,
-            amplitude_goals=amplitude_goals,
-            offset_goals=offset_goals,
-            coupled_phase_biases=coupled_phase_biases
         )
 
     def modulate_random(self, rng):

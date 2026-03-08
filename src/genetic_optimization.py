@@ -1,15 +1,17 @@
 from abc import ABC, abstractmethod
 
-from typing import Callable
+from typing import Callable, Tuple
 
 import jax
 import jax.numpy as jnp
 
+from configs.subcontrollers.config import Configuration
 from src.cpg.cpg import CPG
+from src.cpg.cpg_generators import CPGGenerator
 from src.env import Environment
 from src.jax_extra import jarr
 
-evaluator_t = Callable[[jarr, Environment, CPG], jarr]
+evaluator_t = Callable[[jarr, Configuration], jarr]
 
 
 class GeneticOptimizer(ABC):
@@ -30,17 +32,16 @@ class GeneticOptimizer(ABC):
             population: jarr,
             iterations: int,
             rng: jarr,
-            env: Environment,
-            cpg: CPG) -> jarr:
-        evaluations = evaluator(population, env, cpg)
+            configuration: Configuration) -> Tuple[jarr, jarr]:
+        evaluations = evaluator(population, configuration)
         selections = self.select(population, evaluations)
         for i in range(iterations - 1):
             rng, _rng = jax.random.split(rng)
-            evaluations = evaluator(population, env, cpg)
+            evaluations = evaluator(population, configuration)
             selections = self.select(population, evaluations)
             population = self.reproduce(selections, evaluations, _rng)
             jax.debug.print("{i}: {x}", i=i + 1, x=jnp.max(evaluations))
-        return selections
+        return selections, evaluations
 
 
 class BasicGeneticOptimizer(GeneticOptimizer):

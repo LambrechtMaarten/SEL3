@@ -1,4 +1,3 @@
-from configs.config import Configuration
 from configs.subconfiguration import SubConfiguration
 from src.genetic_optimization import GeneticOptimizer, BasicGeneticOptimizer
 

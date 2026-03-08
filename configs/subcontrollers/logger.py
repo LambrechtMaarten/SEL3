@@ -15,6 +15,9 @@ from src.render import save_video
 class Logger(SubConfiguration):
     def __init__(self, name: str):
         super().__init__(name)
+        self.base_folder = os.path.join("..", "output", datetime.datetime.now().strftime("%Y_%m_%d-%H.%M.%S"))
+        if not os.path.exists(self.base_folder):
+            os.makedirs(self.base_folder)
 
     @abstractmethod
     def log_configuration(self):
@@ -50,9 +53,6 @@ def standard():
     class StandardLogger(Logger):
         def __init__(self):
             super().__init__("standard")
-            self.base_folder = os.path.join("..", "output", datetime.datetime.now().strftime("%Y_%m_%d-%H.%M.%S"))
-            if not os.path.exists(self.base_folder):
-                os.makedirs(self.base_folder)
 
         def log_configuration(self):
             data = {}
