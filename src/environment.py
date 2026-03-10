@@ -4,7 +4,7 @@ from biorobot.brittle_star.mjcf.arena.aquarium import MJCFAquariumArena
 from biorobot.brittle_star.mjcf.morphology.morphology import MJCFBrittleStarMorphology
 from moojoco.environment.base import BaseEnvState
 
-from configs.subcontrollers.config import Configuration
+from configs.config import Configuration
 from src.render import post_render
 
 
@@ -17,7 +17,8 @@ class Environment:
             (MJCFBrittleStarMorphology(self.configuration.simulation.morphology_configuration)),
             (MJCFAquariumArena(self.configuration.simulation.arena_configuration)),
             self.configuration.simulation.environment_configuration,
-            backend="MJX")
+            backend="MJX"
+        )
         self._step = jax.jit(self.env.step)
         self._reset = jax.jit(self.env.reset)
 
@@ -26,9 +27,7 @@ class Environment:
     def step(self, action, state) -> BaseEnvState:
         return self._step(action=action, state=state)
 
-    def reset(self, rng=None):
-        if rng is None:
-            rng = self.configuration.random.split()
+    def reset(self, rng):
         return self._reset(rng=rng)
 
     def render(self, state):

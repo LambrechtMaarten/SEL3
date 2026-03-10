@@ -3,6 +3,11 @@ from src.cpg.cpg_generators import CPGGenerator, BasicCPGGenerator, FullyConnect
 
 
 class CPGConfiguration(SubConfiguration):
+    """
+    This class contains the configuration of the CPG.
+    It determines among other things how many oscilators there are per arm and how these map to actuators.
+    """
+
     def __init__(
             self,
             name: str,

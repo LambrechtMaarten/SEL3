@@ -3,7 +3,7 @@ from typing import Tuple, List
 
 import jax.numpy as jnp
 
-from configs.subcontrollers.config import Configuration
+from configs.config import Configuration
 from src.cpg.cpg import CPG, CPGState
 from src.jax_extra import jarr
 
@@ -52,6 +52,9 @@ class CPGGenerator(ABC):
     # todo
     # @abstractmethod
     # def modulate_arm(self, cpg_state, arm: jarr):
+    #     pass
+    #
+    # def arm_to_jarr(self, arm: int):
     #     pass
     #
     # @abstractmethod

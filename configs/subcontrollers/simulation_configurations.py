@@ -10,6 +10,11 @@ from src.numerical_analysis import DifferentialEquationSolver, EulerSolver
 
 
 class SimulationConfiguration(SubConfiguration):
+    """
+    This class configures all details of the simulation.
+    This includes the arena and morphology, as well as the simulation time and step size.
+    """
+
     def __init__(
             self,
             name: str,

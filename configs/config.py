@@ -12,6 +12,10 @@ if TYPE_CHECKING:
 
 @dataclass
 class Configuration:
+    """
+    This class contains the configuration of the entire process of training a brittle star robot.
+    The algorithm is meant to be unchangable, with the only way of changing training being to pass a different Configuration.
+    """
     logger: "Logger"
     simulation: "SimulationConfiguration"
     cpg: "CPGConfiguration"

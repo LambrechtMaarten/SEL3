@@ -1,17 +1,13 @@
 from abc import ABC, abstractmethod
-
 from typing import Callable, Tuple
 
 import jax
 import jax.numpy as jnp
 
-from configs.subcontrollers.config import Configuration
-from src.cpg.cpg import CPG
-from src.cpg.cpg_generators import CPGGenerator
-from src.env import Environment
+from configs.subcontrollers.logger import Logger
 from src.jax_extra import jarr
 
-evaluator_t = Callable[[jarr, Configuration], jarr]
+evaluator_t = Callable[[jarr], jarr]
 
 
 class GeneticOptimizer(ABC):
@@ -28,19 +24,24 @@ class GeneticOptimizer(ABC):
         pass
 
     def generation(
-            self, evaluator: evaluator_t,
+            self,
+            evaluator: evaluator_t,
             population: jarr,
             iterations: int,
             rng: jarr,
-            configuration: Configuration) -> Tuple[jarr, jarr]:
-        evaluations = evaluator(population, configuration)
-        selections = self.select(population, evaluations)
-        for i in range(iterations - 1):
+            logger: Logger) -> Tuple[jarr, jarr]:
+        evaluations = jnp.zeros(0)
+        selections = jnp.zeros(0)
+
+        for i in range(iterations):
             rng, _rng = jax.random.split(rng)
-            evaluations = evaluator(population, configuration)
+            if i != 0:
+                population = self.reproduce(selections, evaluations, _rng)
+            evaluations = evaluator(population)
             selections = self.select(population, evaluations)
-            population = self.reproduce(selections, evaluations, _rng)
-            jax.debug.print("{i}: {x}", i=i + 1, x=jnp.max(evaluations))
+            logger.log_genetic_generation(population, evaluations, selections)
+            logger.log(f'{i}:\t{jnp.max(evaluations)}')
+
         return selections, evaluations
 
 
@@ -49,7 +50,17 @@ class BasicGeneticOptimizer(GeneticOptimizer):
         return population[jnp.argsort(evaluations)[-jnp.size(population, 0) // 2:]]
 
     def reproduce(self, genomes: jarr, evaluations: jarr, rng) -> jarr:
-        return jnp.concatenate([genomes, genomes + jax.random.normal(rng, genomes.shape) / 20])
+        return jnp.concatenate([genomes, genomes + jax.random.normal(rng, genomes.shape)])
+
+
+class RandomNormalGeneticOptimizer(GeneticOptimizer):
+    def select(self, population: jarr, evaluations: jarr) -> jarr:
+        return population[jnp.argsort(evaluations)[-jnp.size(population, 0) // 2:]]
+
+    def reproduce(self, genomes: jarr, evaluations: jarr, rng) -> jarr:
+        rng1, rng2 = jax.random.split(rng)
+        multiplier = 0.01 * (10 ** jax.random.uniform(rng1, minval=0, maxval=2.4, shape=genomes.shape))
+        return jnp.concatenate([genomes, genomes + jax.random.normal(rng2, genomes.shape) * multiplier])
 
 
 class VarianceGeneticOptimizer(GeneticOptimizer):

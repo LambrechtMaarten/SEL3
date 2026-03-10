@@ -3,7 +3,7 @@ from flax import struct
 from flax.typing import Shape
 from jax import numpy as jnp
 
-from configs.subcontrollers.config import Configuration
+from configs.config import Configuration
 from src.jax_extra import jarr
 
 
