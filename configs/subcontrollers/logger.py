@@ -20,8 +20,6 @@ class Logger(SubConfiguration):
     def __init__(self, name: str):
         super().__init__(name)
         self.base_folder = os.path.join("..", "output", datetime.datetime.now().strftime("%Y_%m_%d-%H.%M.%S"))
-        if not os.path.exists(self.base_folder):
-            os.makedirs(self.base_folder)
 
     def log_controller(self, str):
         path = Path(os.path.join(self.base_folder, "controller"))
@@ -71,6 +69,8 @@ def standard():
     class StandardLogger(Logger):
         def __init__(self):
             super().__init__("standard")
+            if not os.path.exists(self.base_folder):
+                os.makedirs(self.base_folder)
 
         def log_configuration(self):
             data = {}

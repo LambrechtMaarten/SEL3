@@ -27,17 +27,17 @@ def main():
     genetic_optimizer = configuration.genetic.genetic_optimizer
     starting_population = genetic_optimizer.initialize_population(
         configuration.genetic.population_size,
-        configuration.controller.genome_size,
+        configuration.controller.controller.genome_size(configuration),
         configuration.random.split()
     )
     selections, evaluations = genetic_optimizer.generation(
-        configuration.controller.evaluator(configuration),
+        configuration.controller.controller.evaluator(configuration),
         starting_population,
         configuration.genetic.number_of_generations,
         configuration.random.split(),
         configuration.logger
     )
-    controller = configuration.controller.train_controller(selections, evaluations, configuration)
+    controller = configuration.controller.controller.train_controller(selections, evaluations, configuration)
     controller.save_controller(configuration.logger)
 
     env = Environment(configuration)
