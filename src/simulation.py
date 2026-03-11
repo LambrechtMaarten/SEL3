@@ -1,26 +1,28 @@
 import cv2
 import numpy as np
 
-import configs
-import configs.subcontrollers.controller_configurations
-import configs.subcontrollers.cpg_configurations
-import configs.subcontrollers.genetic_configurations
-import configs.subcontrollers.logger
-import configs.subcontrollers.random_configurations
-import configs.subcontrollers.simulation_configurations
 from configs.config import Configuration
+from configs.subconfiguration import SubConfigurationMap
+from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
+from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
+from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
+from configs.subcontrollers.logger.logger import Logger
+from configs.subcontrollers.random.random_configurations import RandomConfiguration
+from configs.subcontrollers.register import register
+from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
 from src.controller import Input
 from src.environment import Environment
 
 
 def main():
+    register()
     configuration = Configuration(
-        configs.subcontrollers.logger.silent(),
-        configs.subcontrollers.simulation_configurations.standard(),
-        configs.subcontrollers.cpg_configurations.fully_connected(),
-        configs.subcontrollers.random_configurations.standard(),
-        configs.subcontrollers.genetic_configurations.short(),
-        configs.subcontrollers.controller_configurations.body_direction()
+        SubConfigurationMap.get_configuration(Logger, "standard"),
+        SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(CPGConfiguration, "fully_connected"),
+        SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "body_direction")
     )
     env = Environment(configuration)
     cpg_generator = configuration.cpg.cpg_generator

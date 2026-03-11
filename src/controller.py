@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 
 from configs.config import Configuration
-from configs.subcontrollers.logger import Logger
+from configs.subcontrollers.logger.logger import Logger
 from src.cpg.cpg import CPGState
 from src.environment import Environment
 from src.jax_extra import jarr
@@ -99,7 +99,8 @@ class StandardController(Controller):
         return cpg_generator.body_to_jarr(cpg.reset()).size
 
     def save_controller(self, logger: Logger):
-        logger.log_controller(self.body_cpg)
+        # noinspection PyTypeChecker
+        logger.log_controller(jnp.array_str(self.body_cpg))
 
     def read_controller(self, path: str):
         with open(path, "r") as f:
