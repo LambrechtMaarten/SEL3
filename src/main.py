@@ -12,9 +12,9 @@ from configs.subcontrollers.simulation.simulation_configurations import Simulati
 from src.simulation.simulate_controller import simulate_controller
 from src.training.train_controller import train_controller
 
-if __name__ == '__main__':
-    register()
-    configuration = Configuration(
+
+def create_configuration():
+    return Configuration(
         SubConfigurationMap.get_configuration(Logger, "standard"),
         SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
         SubConfigurationMap.get_configuration(CPGConfiguration, "fully_connected"),
@@ -22,7 +22,11 @@ if __name__ == '__main__':
         SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
         SubConfigurationMap.get_configuration(ControllerConfiguration, "body_direction")
     )
+
+
+if __name__ == '__main__':
+    register()
     if sys.argv[1] == "train":
-        train_controller(configuration)
+        train_controller(create_configuration())
     elif sys.argv[1] == "simulate":
-        simulate_controller(configuration)
+        simulate_controller("../output/2026_03_10-10.36.18/")

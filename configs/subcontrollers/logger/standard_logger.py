@@ -17,6 +17,8 @@ class StandardLogger(Logger):
 
     def __init__(self):
         super().__init__("standard")
+
+    def init_logger(self):
         if not os.path.exists(self.base_folder):
             os.makedirs(self.base_folder)
 

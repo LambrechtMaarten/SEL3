@@ -16,6 +16,10 @@ class Logger(SubConfiguration):
         super().__init__(name)
         self.base_folder = os.path.join("../..", "output", datetime.datetime.now().strftime("%Y_%m_%d-%H.%M.%S"))
 
+    @abstractmethod
+    def init_logger(self):
+        pass
+
     def log_controller(self, string):
         path = Path(os.path.join(self.base_folder, "controller"))
         if not os.path.exists(path):

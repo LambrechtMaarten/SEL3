@@ -11,6 +11,9 @@ class SilentLogger(Logger):
     def __init__(self):
         super().__init__("silent_logger")
 
+    def init_logger(self):
+        pass
+
     def log_configuration(self):
         pass
 
