@@ -1,0 +1,26 @@
+#PBS -l nodes=1:ppn=1
+#PBS -l gpus=1
+#PBS -l walltime=01:20:00
+#PBS -m abe
+#PBS -M maalambr.lambrecht@ugent.be
+#PBS -o main.out 
+#PBS -e main.err
+
+# Assumes program is queued like this: "qsub srcipts/run_main.pbs"
+cd $PBS_O_WORKDIR
+
+
+echo "Loading modules"
+ml load GCCcore/12.3.0 
+ml load Python/3.11.3-GCCcore-12.3.0 
+ml load FFmpeg/6.0-GCCcore-12.3.0
+module load CUDA/12.8.0
+
+# Venv for the cluster running this script on should have already been made
+# For each cluster a separate venv needs to be created, see env_script.sh
+echo "Starting venv"
+source venv/sel3_${VSC_INSTITUTE_CLUSTER}/bin/activate
+
+echo "Starting main.py"
+
+PYTHONPATH=. python src/main.py
