@@ -12,9 +12,12 @@ from configs.subcontrollers.simulation.simulation_configurations import Simulati
 from src.simulation.simulate_controller import simulate_controller
 from src.training.train_controller import train_controller
 
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("you need to say \"train\" or \"simulate\" as the first arg or it doesn't know what to do")
 
-def create_configuration():
-    return Configuration(
+    register()
+    configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "standard"),
         SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
         SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
@@ -23,10 +26,8 @@ def create_configuration():
         SubConfigurationMap.get_configuration(ControllerConfiguration, "standard")
     )
 
-
-if __name__ == '__main__':
-    register()
     if sys.argv[1] == "train":
-        train_controller(create_configuration())
+        train_controller(configuration)
+
     elif sys.argv[1] == "simulate":
         simulate_controller(sys.argv[2])

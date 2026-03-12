@@ -1,34 +1,23 @@
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Callable
-
-import jax
-import jax.numpy as jnp
 
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
-from src.cpg.cpg import CPGState
-from src.environment.environment import Environment
+from src.controller.control_input import ControlInput
+from src.cpg.cpg_state import CPGState
 from src.jax_extra.jax_extra import jarr
 
 
-class Input(Enum):
-    UP = "up"
-    ZZZ = "wait"
-    DOWN = "down"
-    LEFT = "left"
-    RIGHT = "right"
-    UPLEFT = "upleft"
-    UPRIGHT = "upright"
-    DOWNLEFT = "downleft"
-    DOWNRIGHT = "downright"
-    TURN_LEFT = "turn_left"
-    TURN_RIGHT = "turn_right"
-
-
 class Controller(ABC):
+    """
+    The controller implements all function that determine how the brittle star behaves for user input.
+    This includes the training function for the genetic algorithm (with genome size) and functions to
+    train the controller from a genetic selection.
+    The controller also has functions to write itself to or read itself from files.
+    """
+
     @abstractmethod
-    def act(self, cpg_state: CPGState, control_input: Input, configuration: Configuration) -> CPGState:
+    def act(self, cpg_state: CPGState, control_input: ControlInput, configuration: Configuration) -> CPGState:
         pass
 
     @abstractmethod
@@ -51,166 +40,3 @@ class Controller(ABC):
     @abstractmethod
     def read_controller(self, path: str):
         pass
-
-
-class StandardController(Controller):
-    def __init__(self):
-        self.body_cpg: jarr | None = None
-
-    def act(self, cpg_state: CPGState, control_input: Input, configuration: Configuration):
-        cpg_generator = configuration.cpg.cpg_generator
-        if control_input == Input.ZZZ:
-            return cpg_generator.modulate_body(
-                cpg_state, cpg_generator.body_to_jarr(cpg_generator.generate(configuration).reset())
-            )
-        return cpg_generator.modulate_body(cpg_state, self.body_cpg)
-
-    def train_controller(self, genetic_selections: jarr, genetic_evaluations: jarr, configuration: Configuration):
-        self.body_cpg = genetic_selections[0]
-
-    @staticmethod
-    def evaluator(configuration: Configuration) -> Callable[[jarr], jarr]:
-        rng = configuration.random.split()
-
-        def evaluator(arr: jarr) -> jarr:
-            def _evaluator(_arr: jarr, _rng: jarr) -> jarr | float:
-                env = Environment(configuration)
-                env_state = env.reset(_rng)
-                cpg_generator = configuration.cpg.cpg_generator
-                cpg = cpg_generator.generate(configuration)
-                cpg_state = cpg_generator.modulate_body(cpg.reset(), _arr)
-                score = 0
-                for i in range(400):
-                    cpg_state = cpg.step(cpg_state)
-                    env_state = env.step(
-                        cpg_generator.outputs_to_actions(cpg_state.outputs, configuration),
-                        env_state
-                    )
-                    score += env_state.observations["disk_position"][0]
-                return score
-
-            return jax.vmap(_evaluator)(arr, jax.random.split(rng, len(arr)))
-
-        return evaluator
-
-    def genome_size(self, configuration: Configuration) -> int:
-        cpg_generator = configuration.cpg.cpg_generator
-        cpg = cpg_generator.generate(configuration)
-        return cpg_generator.body_to_jarr(cpg.reset()).size
-
-    def save_controller(self, logger: Logger):
-        # noinspection PyTypeChecker
-        logger.log_controller(jnp.array_str(self.body_cpg))
-
-    def read_controller(self, path: str):
-        with open(path, "r") as f:
-            arrays = f.read()
-            self.body_cpg = jnp.array([float(x) for x in arrays.replace("[", " ").replace("]", " ").split()])
-
-
-class BodyDirectionController(Controller):
-    def __init__(self):
-        self.cpg_map = dict()
-
-    def act(self, cpg_state: CPGState, control_input: Input, configuration: Configuration):
-        cpg_generator = configuration.cpg.cpg_generator
-        if control_input == Input.ZZZ:
-            return cpg_generator.modulate_body(
-                cpg_state,
-                cpg_generator.body_to_jarr(cpg_generator.generate(configuration).reset())
-            )
-        return cpg_generator.modulate_body(cpg_state, self.cpg_map[control_input])
-
-    def train_controller(self, genetic_selections: jarr, genetic_evaluations: jarr,
-                         configuration: Configuration):
-        all_scores = []
-        rng = configuration.random.split()
-        for i in range(len(genetic_selections)):
-            rng, _rng = jax.random.split(rng)
-            env = Environment(configuration)
-            env_state = env.reset(_rng)
-            cpg_generator = configuration.cpg.cpg_generator
-            cpg = cpg_generator.generate(configuration)
-            cpg_state = cpg_generator.modulate_body(cpg.reset(), genetic_selections[i])
-            for _ in range(200):
-                cpg_state = cpg.step(cpg_state)
-                env_state = env.step(
-                    cpg_generator.outputs_to_actions(cpg_state.outputs, configuration),
-                    env_state
-                )
-            all_scores.append([
-                env_state.observations["disk_position"][0],
-                -env_state.observations["disk_position"][0],
-                env_state.observations["disk_position"][1],
-                -env_state.observations["disk_position"][1],
-                -env_state.observations["disk_rotation"][1],
-                env_state.observations["disk_rotation"][1],
-            ])
-
-        directions = [Input.RIGHT, Input.LEFT, Input.UP, Input.DOWN, Input.TURN_LEFT, Input.TURN_RIGHT]
-        for i, direction in enumerate(directions):
-            max_index = max(range(len(all_scores)), key=lambda j: all_scores[j][i])
-            self.cpg_map[direction] = genetic_selections[max_index]
-
-    @staticmethod
-    def evaluator(configuration: Configuration) -> Callable[[jarr], jarr]:
-        def evaluator(arr: jarr) -> jarr:
-            all_scores = []
-
-            def _evaluator(_arr: jarr, _rng: jarr, ):
-                env = Environment(configuration)
-                env_state = env.reset(_rng)
-                cpg_generator = configuration.cpg.cpg_generator
-                cpg = cpg_generator.generate(configuration)
-                cpg_state = cpg_generator.modulate_body(cpg.reset(), _arr)
-                for _ in range(200):
-                    cpg_state = cpg.step(cpg_state)
-                    env_state = env.step(
-                        cpg_generator.outputs_to_actions(cpg_state.outputs, configuration),
-                        env_state
-                    )
-                return [
-                    env_state.observations["disk_position"][0],
-                    -env_state.observations["disk_position"][0],
-                    env_state.observations["disk_position"][1],
-                    -env_state.observations["disk_position"][1],
-                    -env_state.observations["disk_rotation"][1],
-                    env_state.observations["disk_rotation"][1],
-                ]
-
-            rng = configuration.random.split()
-            for i in range(len(arr)):
-                rng, _rng = jax.random.split(rng)
-                all_scores.append(_evaluator(arr[i], _rng))
-            scores: jarr = jnp.zeros(len(all_scores))
-
-            counts = [0] * 6
-            for t in all_scores:
-                order = sorted(range(6), key=lambda j: t[j], reverse=True)
-                for i in order:
-                    if counts[i] < (len(all_scores) + 5) // 6:
-                        scores = scores.at[i].set(t[i])
-                        counts[i] += 1
-                        break
-            return scores
-
-        return evaluator
-
-    def genome_size(self, configuration: Configuration):
-        cpg_generator = configuration.cpg.cpg_generator
-        cpg = cpg_generator.generate(configuration)
-        return cpg_generator.body_to_jarr(cpg.reset()).size
-
-    def save_controller(self, logger: Logger):
-        for direction in [Input.RIGHT, Input.LEFT, Input.UP, Input.DOWN, Input.TURN_LEFT, Input.TURN_RIGHT]:
-            # noinspection PyTypeChecker
-            logger.log_controller(jnp.array_str(self.cpg_map[direction]))
-
-    def read_controller(self, path: str):
-        with open(path, "r") as f:
-            arrays = f.read()
-            jnp_array = jnp.array([float(x) for x in arrays.replace("[", " ").replace("]", " ").split()])
-            jnp_array = jnp.reshape(jnp_array, (6, -1))
-            for i, direction in enumerate(
-                    [Input.RIGHT, Input.LEFT, Input.UP, Input.DOWN, Input.TURN_LEFT, Input.TURN_RIGHT]):
-                self.cpg_map[direction] = jnp_array[i]

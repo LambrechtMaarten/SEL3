@@ -1,96 +1,125 @@
+import sys
+
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import imageio
 import os
+import jax.numpy as jnp
 
-# -------------------------
-# INPUT DATA
-# -------------------------
-# populations: list of 20 arrays of shape (100, 67)
-# selections: list of 20 arrays of shape (50, 67)
+from configs.config import Configuration
+from configs.subconfiguration_map import SubConfigurationMap
+from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
+from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
+from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
+from configs.subcontrollers.logger.logger import Logger
+from configs.subcontrollers.random.random_configurations import RandomConfiguration
+from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
 
-# Example placeholders (REMOVE if you already have real data)
-populations = [np.random.rand(100,67) for _ in range(20)]
-selections = [pop[:50] for pop in populations]
 
-generations = len(populations)
+def tst(path: str):
+    with open(os.path.join(path, "genetic"), "r") as f:
+        arrays = f.readlines()
+    jnp_array = jnp.array([float(x) for x in arrays.replace("[", " ").replace("]", " ").split()])
+    with open(os.path.join(path, "configuration.json"), "r") as f:
+        configuration_json = f.read()
+    configuration = Configuration(
+        SubConfigurationMap.get_configuration(Logger, "silent_logger"),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, SimulationConfiguration),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, CPGConfiguration),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, RandomConfiguration),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, GeneticConfiguration),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, ControllerConfiguration)
+    )
+    genome_size = configuration.controller.controller.genome_size(configuration)
+    print(genome_size)
+    print(len(jnp_array))
+    exit(0)
+    populations = [np.random.rand(100, 67) for _ in range(20)]
+    selections = [pop[:50] for pop in populations]
 
-# -------------------------
-# COLLECT ALL GENOMES
-# -------------------------
-all_genomes = np.vstack(populations)
+    generations = len(populations)
 
-print("Running t-SNE on", all_genomes.shape)
+    # -------------------------
+    # COLLECT ALL GENOMES
+    # -------------------------
+    all_genomes = np.vstack(populations)
 
-tsne = TSNE(
-    n_components=2,
-    perplexity=30,
-    random_state=42,
-    init="pca",
-    learning_rate="auto"
-)
+    print("Running t-SNE on", all_genomes.shape)
 
-embedding = tsne.fit_transform(all_genomes)
+    tsne = TSNE(
+        n_components=2,
+        perplexity=30,
+        random_state=42,
+        init="pca",
+        learning_rate="auto"
+    )
 
-# split embedding back into generations
-embeddings_per_gen = []
-start = 0
-for pop in populations:
-    end = start + len(pop)
-    embeddings_per_gen.append(embedding[start:end])
-    start = end
+    embedding = tsne.fit_transform(all_genomes)
 
-# -------------------------
-# CREATE OUTPUT FOLDER
-# -------------------------
-frame_dir = "tsne_frames"
-os.makedirs(frame_dir, exist_ok=True)
+    # split embedding back into generations
+    embeddings_per_gen = []
+    start = 0
+    for pop in populations:
+        end = start + len(pop)
+        embeddings_per_gen.append(embedding[start:end])
+        start = end
 
-frames = []
+    # -------------------------
+    # CREATE OUTPUT FOLDER
+    # -------------------------
+    frame_dir = "tsne_frames"
+    os.makedirs(frame_dir, exist_ok=True)
 
-# -------------------------
-# PLOT EACH GENERATION
-# -------------------------
-for gen in range(generations):
+    frames = []
 
-    pop = populations[gen]
-    sel = selections[gen]
-    emb = embeddings_per_gen[gen]
+    # -------------------------
+    # PLOT EACH GENERATION
+    # -------------------------
+    for gen in range(generations):
 
-    # determine which population members are selected
-    selected_mask = np.zeros(len(pop), dtype=bool)
+        pop = populations[gen]
+        sel = selections[gen]
+        emb = embeddings_per_gen[gen]
 
-    for s in sel:
-        matches = np.where((pop == s).all(axis=1))[0]
-        if len(matches) > 0:
-            selected_mask[matches[0]] = True
+        # determine which population members are selected
+        selected_mask = np.zeros(len(pop), dtype=bool)
 
-    pop_points = emb[~selected_mask]
-    sel_points = emb[selected_mask]
+        for s in sel:
+            matches = np.where((pop == s).all(axis=1))[0]
+            if len(matches) > 0:
+                selected_mask[matches[0]] = True
 
-    plt.figure(figsize=(6,6))
+        pop_points = emb[~selected_mask]
+        sel_points = emb[selected_mask]
 
-    plt.scatter(pop_points[:,0], pop_points[:,1],
-                c="blue", s=40, label="Population")
+        plt.figure(figsize=(6, 6))
 
-    plt.scatter(sel_points[:,0], sel_points[:,1],
-                c="yellow", edgecolors="black", s=70, label="Selected")
+        plt.scatter(pop_points[:, 0], pop_points[:, 1],
+                    c="blue", s=40, label="Population")
 
-    plt.title(f"Generation {gen}")
-    plt.legend()
-    plt.tight_layout()
+        plt.scatter(sel_points[:, 0], sel_points[:, 1],
+                    c="yellow", edgecolors="black", s=70, label="Selected")
 
-    frame_path = f"{frame_dir}/frame_{gen:03d}.png"
-    plt.savefig(frame_path)
-    plt.close()
+        plt.title(f"Generation {gen}")
+        plt.legend()
+        plt.tight_layout()
 
-    frames.append(imageio.imread(frame_path))
+        frame_path = f"{frame_dir}/frame_{gen:03d}.png"
+        plt.savefig(frame_path)
+        plt.close()
 
-# -------------------------
-# CREATE GIF
-# -------------------------
-gif_path = "genetic_algorithm_tsne.gif"
-imageio.mimsave(gif_path, frames, duration=10)
+        frames.append(imageio.imread(frame_path))
 
-print("GIF saved to:", gif_path)
+    # -------------------------
+    # CREATE GIF
+    # -------------------------
+    gif_path = "genetic_algorithm_tsne.gif"
+    imageio.mimsave(gif_path, frames, duration=10)
+
+    print("GIF saved to:", gif_path)
+
+
+if __name__ == '__main__':
+    if sys.argv[1] == "test":
+        tst(sys.argv[2])

@@ -1,5 +1,4 @@
 import os.path
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -12,7 +11,7 @@ from configs.subcontrollers.genetic.genetic_configurations import GeneticConfigu
 from configs.subcontrollers.logger.logger import Logger
 from configs.subcontrollers.random.random_configurations import RandomConfiguration
 from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
-from src.controller.controller import Input
+from src.controller.control_input import ControlInput
 from src.environment.environment import Environment
 
 
@@ -41,13 +40,13 @@ def simulate_controller(output_path: str):
         if key == 27:  # escape
             break
         control_input = {
-            ord("z"): Input.UP,
-            ord("s"): Input.DOWN,
-            ord("q"): Input.LEFT,
-            ord("d"): Input.RIGHT,
-            ord("a"): Input.TURN_LEFT,
-            ord("e"): Input.TURN_RIGHT,
-        }.get(key, Input.ZZZ)
+            ord("z"): ControlInput.UP,
+            ord("s"): ControlInput.DOWN,
+            ord("q"): ControlInput.LEFT,
+            ord("d"): ControlInput.RIGHT,
+            ord("a"): ControlInput.TURN_LEFT,
+            ord("e"): ControlInput.TURN_RIGHT,
+        }.get(key, ControlInput.ZZZ)
 
         cpg_state = configuration.controller.controller.act(cpg_state, control_input, configuration)
         cpg_state = cpg.step(cpg_state)

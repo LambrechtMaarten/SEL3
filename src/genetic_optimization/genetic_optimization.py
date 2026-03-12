@@ -43,32 +43,3 @@ class GeneticOptimizer(ABC):
             logger.log(f'{i}:\t{jnp.max(evaluations)}')
 
         return selections, evaluations
-
-
-class BasicGeneticOptimizer(GeneticOptimizer):
-    def select(self, population: jarr, evaluations: jarr) -> jarr:
-        return population[jnp.argsort(evaluations)[-jnp.size(population, 0) // 2:]]
-
-    def reproduce(self, genomes: jarr, evaluations: jarr, rng) -> jarr:
-        return jnp.concatenate([genomes, genomes + jax.random.normal(rng, genomes.shape)])
-
-
-class RandomNormalGeneticOptimizer(GeneticOptimizer):
-    def select(self, population: jarr, evaluations: jarr) -> jarr:
-        return population[jnp.argsort(evaluations)[-jnp.size(population, 0) // 2:]]
-
-    def reproduce(self, genomes: jarr, evaluations: jarr, rng) -> jarr:
-        rng1, rng2 = jax.random.split(rng)
-        multiplier = 0.01 * (10 ** jax.random.uniform(rng1, minval=0, maxval=2.4, shape=genomes.shape))
-        return jnp.concatenate([genomes, genomes + jax.random.normal(rng2, genomes.shape) * multiplier])
-
-
-class VarianceGeneticOptimizer(GeneticOptimizer):
-    def select(self, population: jarr, evaluations: jarr) -> jarr:
-        return population[jnp.argsort(evaluations)[-jnp.size(population, 0) // 2:]]
-
-    def reproduce(self, genomes: jarr, evaluations: jarr, rng) -> jarr:
-        return jnp.concatenate([
-            genomes,
-            genomes + jax.random.normal(rng, genomes.shape) * jnp.sqrt(jnp.abs(jnp.max(evaluations)))
-        ])

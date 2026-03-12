@@ -5,7 +5,7 @@ from biorobot.brittle_star.mjcf.morphology.specification.default import default_
 
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
-from src.numerical_analysis.numerical_analysis import EulerSolver
+from src.numerical_analysis.euler_solver import EulerSolver
 
 
 def register():

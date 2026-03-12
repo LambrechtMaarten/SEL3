@@ -1,7 +1,7 @@
 import time
 
 from configs.config import Configuration
-from src.controller.controller import Input
+from src.controller.control_input import ControlInput
 from src.environment.environment import Environment
 
 
@@ -31,12 +31,11 @@ def train_controller(configuration: Configuration):
     cpg_generator = configuration.cpg.cpg_generator
     cpg = cpg_generator.generate(configuration)
     env_state = env.reset(configuration.random.split())
-    # cpg_state = cpg_generator.modulate_cpg(cpg.reset(), 2, .3)
     cpg_state = cpg.reset()
 
     frames = []
     while not (env_state.terminated | env_state.truncated):
-        cpg_state = configuration.controller.controller.act(cpg_state, Input.LEFT, configuration)
+        cpg_state = configuration.controller.controller.act(cpg_state, ControlInput.LEFT, configuration)
         cpg_state = cpg.step(cpg_state)
         actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
         env_state = env.step(actions, env_state)
