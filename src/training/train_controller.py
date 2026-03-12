@@ -41,7 +41,7 @@ def train_controller(configuration: Configuration):
         env_state = env.step(actions, env_state)
         frames.append(env.render(env_state))
 
-    configuration.logger.log_video(frames, "video.mp4")
+    configuration.logger.log_video(frames, "video")
 
     end = time.time()
-    configuration.logger.log(str(end - start))
+    configuration.logger.log({"time": end - start})
