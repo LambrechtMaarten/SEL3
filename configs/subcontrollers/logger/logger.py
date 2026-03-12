@@ -14,7 +14,7 @@ class Logger(SubConfiguration):
 
     def __init__(self, name: str):
         super().__init__(name)
-        self.base_folder = os.path.join("../..", "output", datetime.datetime.now().strftime("%Y_%m_%d-%H.%M.%S"))
+        self.base_folder = os.path.join("output", datetime.datetime.now().strftime("%Y_%m_%d-%H.%M.%S"))
 
     @abstractmethod
     def init_logger(self):

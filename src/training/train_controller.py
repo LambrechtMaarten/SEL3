@@ -8,6 +8,7 @@ from src.environment.environment import Environment
 def train_controller(configuration: Configuration):
     start = time.time()
 
+    configuration.logger.init_logger()
     configuration.logger.log_configuration()
 
     genetic_optimizer = configuration.genetic.genetic_optimizer

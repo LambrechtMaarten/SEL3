@@ -17,10 +17,10 @@ def create_configuration():
     return Configuration(
         SubConfigurationMap.get_configuration(Logger, "standard"),
         SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
-        SubConfigurationMap.get_configuration(CPGConfiguration, "fully_connected"),
+        SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
         SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
         SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
-        SubConfigurationMap.get_configuration(ControllerConfiguration, "body_direction")
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "standard")
     )
 
 
@@ -29,4 +29,4 @@ if __name__ == '__main__':
     if sys.argv[1] == "train":
         train_controller(create_configuration())
     elif sys.argv[1] == "simulate":
-        simulate_controller("../output/2026_03_10-10.36.18/")
+        simulate_controller(sys.argv[2])
