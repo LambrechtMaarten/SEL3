@@ -1,5 +1,5 @@
 from configs.subconfiguration import SubConfiguration
-from src.cpg.cpg_generators import CPGGenerator, BasicCPGGenerator, FullyConnectedCPGGenerator
+from src.cpg.cpg_generators import CPGGenerator
 
 
 class CPGConfiguration(SubConfiguration):
@@ -14,14 +14,3 @@ class CPGConfiguration(SubConfiguration):
             cpg_generator: CPGGenerator):
         super().__init__(name)
         self.cpg_generator: CPGGenerator = cpg_generator
-
-
-standard = lambda: CPGConfiguration(
-    "standard",
-    BasicCPGGenerator()
-)
-
-fully_connected = lambda: CPGConfiguration(
-    "fully_connected",
-    FullyConnectedCPGGenerator()
-)

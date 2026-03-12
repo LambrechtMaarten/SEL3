@@ -5,7 +5,7 @@ from biorobot.brittle_star.mjcf.morphology.morphology import MJCFBrittleStarMorp
 from moojoco.environment.base import BaseEnvState
 
 from configs.config import Configuration
-from src.render import post_render
+from src.render.render import post_render
 
 
 class Environment:

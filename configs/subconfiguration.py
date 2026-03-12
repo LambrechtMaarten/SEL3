@@ -1,4 +1,6 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+
+from configs.config import Configuration
 
 
 class SubConfiguration(ABC):
@@ -11,5 +13,10 @@ class SubConfiguration(ABC):
         self.name = name
         self._configuration = None
 
-    def set_configuration(self, config):
-        self._configuration = config
+    def set_configuration(self, configuration: Configuration) -> None:
+        """
+        This method sets the configuration for this subconfiguration.
+        It is needed because the subconfigurations are arguments of the configuration class and so can't get it in the constructor.
+        :param configuration: the configuration to be set
+        """
+        self._configuration = configuration

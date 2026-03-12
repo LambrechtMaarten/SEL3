@@ -1,0 +1,44 @@
+from abc import ABC, abstractmethod
+from typing import Callable, Tuple
+
+import jax
+import jax.numpy as jnp
+
+from configs.subcontrollers.logger.logger import Logger
+from src.jax_extra.jax_extra import jarr
+
+evaluator_t = Callable[[jarr], jarr]
+
+
+class GeneticOptimizer(ABC):
+    @staticmethod
+    def initialize_population(population_size, genome_size, rng) -> jarr:
+        return jax.random.normal(rng, (population_size, genome_size))
+
+    @abstractmethod
+    def select(self, population: jarr, evaluations: jarr) -> jarr:
+        pass
+
+    @abstractmethod
+    def reproduce(self, genomes: jarr, evaluations: jarr, rng) -> jarr:
+        pass
+
+    def generation(
+            self,
+            evaluator: evaluator_t,
+            population: jarr,
+            iterations: int,
+            rng: jarr,
+            logger: Logger) -> Tuple[jarr, jarr]:
+        evaluations = jnp.zeros(0)
+        selections = jnp.zeros(0)
+
+        for i in range(iterations):
+            rng, _rng = jax.random.split(rng)
+            if i != 0:
+                population = self.reproduce(selections, evaluations, _rng)
+            evaluations = evaluator(population)
+            selections = self.select(population, evaluations)
+            logger.log_genetic_generation(population, evaluations, selections)
+
+        return selections, evaluations

@@ -1,7 +1,7 @@
 import jax
 
 from configs.subconfiguration import SubConfiguration
-from src.jax_extra import jarr
+from src.jax_extra.jax_extra import jarr
 
 
 class RandomConfiguration(SubConfiguration):
@@ -15,9 +15,3 @@ class RandomConfiguration(SubConfiguration):
     def split(self) -> jarr:
         self.rng, _rng = jax.random.split(self.rng)
         return _rng
-
-
-standard = lambda: RandomConfiguration(
-    "standard",
-    0,
-)

@@ -1,5 +1,5 @@
 from configs.subconfiguration import SubConfiguration
-from src.genetic_optimization import GeneticOptimizer, BasicGeneticOptimizer, RandomNormalGeneticOptimizer
+from src.genetic_optimization.genetic_optimization import GeneticOptimizer
 
 
 class GeneticConfiguration(SubConfiguration):
@@ -18,32 +18,3 @@ class GeneticConfiguration(SubConfiguration):
         self.population_size = population_size
         self.number_of_generations = generations
         self.genetic_optimizer = genetic_optimizer
-
-
-standard = lambda: GeneticConfiguration(
-    "standard",
-    10,
-    10,
-    BasicGeneticOptimizer()
-)
-
-short = lambda: GeneticConfiguration(
-    "short",
-    20,
-    3,
-    RandomNormalGeneticOptimizer()
-)
-
-long = lambda: GeneticConfiguration(
-    "long",
-    100,
-    20,
-    RandomNormalGeneticOptimizer()
-)
-
-extensive = lambda: GeneticConfiguration(
-    "extensive",
-    200,
-    50,
-    RandomNormalGeneticOptimizer()
-)

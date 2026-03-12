@@ -1,5 +1,5 @@
 from configs.subconfiguration import SubConfiguration
-from src.controller import Controller, StandardController, BodyDirectionController
+from src.controller.controller import Controller
 
 
 class ControllerConfiguration(SubConfiguration):
@@ -10,17 +10,3 @@ class ControllerConfiguration(SubConfiguration):
     def __init__(self, name, controller: Controller):
         super().__init__(name)
         self.controller = controller
-
-
-def standard():
-    return ControllerConfiguration(
-        "standard",
-        StandardController()
-    )
-
-
-def body_direction():
-    return ControllerConfiguration(
-        "body_direction",
-        BodyDirectionController()
-    )
