@@ -1,5 +1,5 @@
-from typing import TYPE_CHECKING
 from dataclasses import dataclass, fields
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from configs.subcontrollers.logger.logger import Logger

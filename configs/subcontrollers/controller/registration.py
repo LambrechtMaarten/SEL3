@@ -1,6 +1,6 @@
-from configs.subconfiguration import SubConfigurationMap
+from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
-from src.controller import StandardController, BodyDirectionController
+from src.controller.controller import StandardController, BodyDirectionController
 
 
 def register():

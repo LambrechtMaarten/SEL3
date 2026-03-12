@@ -1,5 +1,5 @@
 from configs.subconfiguration import SubConfiguration
-from src.genetic_optimization import GeneticOptimizer
+from src.genetic_optimization.genetic_optimization import GeneticOptimizer
 
 
 class GeneticConfiguration(SubConfiguration):

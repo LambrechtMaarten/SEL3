@@ -3,9 +3,9 @@ from biorobot.brittle_star.environment.undirected_locomotion.shared import \
 from biorobot.brittle_star.mjcf.arena.aquarium import AquariumArenaConfiguration
 from biorobot.brittle_star.mjcf.morphology.specification.default import default_brittle_star_morphology_specification
 
-from configs.subconfiguration import SubConfigurationMap
+from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
-from src.numerical_analysis import EulerSolver
+from src.numerical_analysis.numerical_analysis import EulerSolver
 
 
 def register():

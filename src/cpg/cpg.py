@@ -4,7 +4,7 @@ from flax.typing import Shape
 from jax import numpy as jnp
 
 from configs.config import Configuration
-from src.jax_extra import jarr
+from src.jax_extra.jax_extra import jarr
 
 
 # T_i = x_i + r_i * cos(F_i) = output

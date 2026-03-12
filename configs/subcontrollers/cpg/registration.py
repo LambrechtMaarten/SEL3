@@ -1,4 +1,4 @@
-from configs.subconfiguration import SubConfigurationMap
+from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
 from src.cpg.cpg_generators import BasicCPGGenerator, FullyConnectedCPGGenerator
 

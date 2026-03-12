@@ -1,7 +1,7 @@
 import jax
 
 from configs.subconfiguration import SubConfiguration
-from src.jax_extra import jarr
+from src.jax_extra.jax_extra import jarr
 
 
 class RandomConfiguration(SubConfiguration):

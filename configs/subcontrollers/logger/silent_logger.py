@@ -1,8 +1,13 @@
 from configs.subcontrollers.logger.logger import Logger
-from src.jax_extra import jarr
+from src.jax_extra.jax_extra import jarr
 
 
 class SilentLogger(Logger):
+    """
+    This Logger implementation does not log anything.
+    Usefull for the simulation or for debugging.
+    """
+
     def __init__(self):
         super().__init__("silent_logger")
 

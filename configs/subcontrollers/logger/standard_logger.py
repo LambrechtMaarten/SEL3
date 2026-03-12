@@ -6,11 +6,15 @@ from pathlib import Path
 import jax.numpy as jnp
 
 from configs.subcontrollers.logger.logger import Logger
-from src.jax_extra import jarr
-from src.render import save_video
+from src.jax_extra.jax_extra import jarr
+from src.render.render import save_video
 
 
 class StandardLogger(Logger):
+    """
+    The standard Logger implementation.
+    """
+
     def __init__(self):
         super().__init__("standard")
         if not os.path.exists(self.base_folder):
@@ -30,15 +34,18 @@ class StandardLogger(Logger):
         if not os.path.exists(path):
             path.touch()
         with open(path, "a") as f:
+            # noinspection PyTypeChecker
             f.write(jnp.array_str(population))
             f.write("\n")
+            # noinspection PyTypeChecker
             f.write(jnp.array_str(selections))
             f.write("\n")
+            # noinspection PyTypeChecker
             f.write(jnp.array_str(evaluations))
             f.write("\n")
 
     def log_video(self, frames, name):
-        save_video(frames, os.path.join(self.base_folder, name))
+        save_video(frames, str(os.path.join(self.base_folder, name)))
 
     def log(self, logging: str):
         path = Path(os.path.join(self.base_folder, "log"))

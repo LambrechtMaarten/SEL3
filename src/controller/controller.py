@@ -8,8 +8,8 @@ import jax.numpy as jnp
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
 from src.cpg.cpg import CPGState
-from src.environment import Environment
-from src.jax_extra import jarr
+from src.environment.environment import Environment
+from src.jax_extra.jax_extra import jarr
 
 
 class Input(Enum):

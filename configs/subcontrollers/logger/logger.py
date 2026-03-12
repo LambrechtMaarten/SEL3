@@ -4,7 +4,7 @@ import datetime
 from pathlib import Path
 
 from configs.subconfiguration import SubConfiguration
-from src.jax_extra import jarr
+from src.jax_extra.jax_extra import jarr
 
 
 class Logger(SubConfiguration):

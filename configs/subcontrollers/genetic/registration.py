@@ -1,6 +1,6 @@
-from configs.subconfiguration import SubConfigurationMap
+from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
-from src.genetic_optimization import BasicGeneticOptimizer, RandomNormalGeneticOptimizer
+from src.genetic_optimization.genetic_optimization import BasicGeneticOptimizer, RandomNormalGeneticOptimizer
 
 
 def register():

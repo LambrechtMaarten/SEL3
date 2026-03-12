@@ -1,11 +1,11 @@
 from abc import abstractmethod, ABC
 from typing import Callable
 
-from src.jax_extra import jarr
+from src.jax_extra.jax_extra import jarr
 
 
 class DifferentialEquationSolver(ABC):
-    
+
     @abstractmethod
     def solve(
             self,

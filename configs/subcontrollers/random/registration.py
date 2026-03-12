@@ -1,4 +1,4 @@
-from configs.subconfiguration import SubConfigurationMap
+from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.random.random_configurations import RandomConfiguration
 
 

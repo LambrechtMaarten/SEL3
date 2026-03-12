@@ -5,7 +5,7 @@ import jax.numpy as jnp
 
 from configs.config import Configuration
 from src.cpg.cpg import CPG, CPGState
-from src.jax_extra import jarr
+from src.jax_extra.jax_extra import jarr
 
 
 class CPGGenerator(ABC):

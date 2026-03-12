@@ -1,4 +1,4 @@
-from configs.subconfiguration import SubConfigurationMap
+from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.logger.logger import Logger
 from configs.subcontrollers.logger.silent_logger import SilentLogger
 from configs.subcontrollers.logger.standard_logger import StandardLogger

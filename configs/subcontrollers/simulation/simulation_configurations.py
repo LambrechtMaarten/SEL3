@@ -4,7 +4,7 @@ from biorobot.brittle_star.mjcf.morphology.specification.specification import Br
 from moojoco.mjcf.arena import ArenaConfiguration
 
 from configs.subconfiguration import SubConfiguration
-from src.numerical_analysis import DifferentialEquationSolver
+from src.numerical_analysis.numerical_analysis import DifferentialEquationSolver
 
 
 class SimulationConfiguration(SubConfiguration):
