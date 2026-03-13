@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -16,30 +16,36 @@ class GeneticOptimizer(ABC):
         return jax.random.normal(rng, (population_size, genome_size))
 
     @abstractmethod
-    def select(self, population: jarr, evaluations: jarr) -> jarr:
+    def select(
+        self, population: jarr, evaluations: jarr, rng, state
+    ) -> Tuple[jarr, Any]:
         pass
 
     @abstractmethod
-    def reproduce(self, genomes: jarr, evaluations: jarr, rng) -> jarr:
+    def reproduce(
+        self, genomes: jarr, evaluations: jarr, rng, state
+    ) -> Tuple[jarr, Any]:
         pass
 
     def generation(
-            self,
-            evaluator: evaluator_t,
-            population: jarr,
-            iterations: int,
-            rng: jarr,
-            logger: Logger) -> Tuple[jarr, jarr]:
+        self,
+        evaluator: evaluator_t,
+        population: jarr,
+        iterations: int,
+        rng: jarr,
+        logger: Logger,
+    ) -> Tuple[jarr, jarr]:
         evaluations = jnp.zeros(0)
         selections = jnp.zeros(0)
+        state = None
 
         for i in range(iterations):
-            rng, _rng = jax.random.split(rng)
+            rng, _rng, __rng = jax.random.split(rng, 3)
             if i != 0:
-                population = self.reproduce(selections, evaluations, _rng)
+                population, state = self.reproduce(selections, evaluations, _rng, state)
             evaluations = evaluator(population)
-            selections = self.select(population, evaluations)
+            selections, state = self.select(population, evaluations, __rng, state)
             logger.log_genetic_generation(population, evaluations, selections)
-            logger.log(f'{i}:\t{jnp.max(evaluations)}')
+            logger.log(f"{i}:\t{jnp.max(evaluations)}")
 
         return selections, evaluations
