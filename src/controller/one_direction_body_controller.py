@@ -63,7 +63,7 @@ class OneDirectionBodyController(Controller):
 
     def save_controller(self, logger: Logger):
         # noinspection PyTypeChecker
-        logger.log_controller(jnp.array_str(self.body_cpg))
+        logger.log_controller(self.body_cpg)
 
     def read_controller(self, path: str):
         with open(path, "r") as f:
