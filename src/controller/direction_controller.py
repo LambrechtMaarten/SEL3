@@ -108,7 +108,7 @@ class DirectionController(Controller):
     def save_controller(self, logger: Logger):
         for direction in [ControlInput.RIGHT, ControlInput.LEFT, ControlInput.UP, ControlInput.DOWN, ControlInput.TURN_LEFT, ControlInput.TURN_RIGHT]:
             # noinspection PyTypeChecker
-            logger.log_controller(jnp.array_str(self.cpg_map[direction]))
+            logger.log_controller(self.cpg_map[direction])
 
     def read_controller(self, path: str):
         with open(path, "r") as f:
