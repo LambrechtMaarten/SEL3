@@ -36,6 +36,8 @@ class StandardLogger(Logger):
         if not os.path.exists(path):
             path.touch()
         with open(path, "a") as f:
+            print(population.shape, selections.shape, evaluations.shape)
+            jnp.set_printoptions(threshold=(jnp.inf))
             # noinspection PyTypeChecker
             f.write(jnp.array_str(population))
             f.write("\n")

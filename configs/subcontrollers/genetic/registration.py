@@ -19,7 +19,7 @@ def register():
         GeneticConfiguration,
         GeneticConfiguration(
             "short",
-            20,
+            24,
             3,
             RandomNormalGeneticOptimizer()
         )
@@ -29,8 +29,8 @@ def register():
         GeneticConfiguration,
         GeneticConfiguration(
             "long",
-            100,
-            20,
+            24,
+            50,
             RandomNormalGeneticOptimizer()
         )
     )
@@ -39,8 +39,8 @@ def register():
         GeneticConfiguration,
         GeneticConfiguration(
             "extensive",
-            200,
-            50,
+            48,
+            100,
             RandomNormalGeneticOptimizer()
         )
     )

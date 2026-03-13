@@ -12,7 +12,7 @@ from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
 
 
-class BodyDirectionController(Controller):
+class DirectionController(Controller):
     def __init__(self):
         self.cpg_map = dict()
 
