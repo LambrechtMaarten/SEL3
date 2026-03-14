@@ -17,7 +17,7 @@ def register():
 
     SubConfigurationMap.add_configuration(
         GeneticConfiguration,
-        GeneticConfiguration("evosax", 20, 3, EvoSaxGeneticOptimizer()),
+        GeneticConfiguration("evosax", 128, 10, EvoSaxGeneticOptimizer()),
     )
 
     SubConfigurationMap.add_configuration(

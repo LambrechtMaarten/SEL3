@@ -1,3 +1,4 @@
+import os
 import time
 
 from configs.config import Configuration
@@ -35,17 +36,21 @@ def train_controller(configuration: Configuration):
     env_state = env.reset(configuration.random.split())
     cpg_state = cpg.reset()
 
-    frames = []
-    while not (env_state.terminated | env_state.truncated):
-        cpg_state = configuration.controller.controller.act(
-            cpg_state, ControlInput.LEFT, configuration
-        )
-        cpg_state = cpg.step(cpg_state)
-        actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
-        env_state = env.step(actions, env_state)
-        frames.append(env.render(env_state))
+    headless = os.getenv("HEADLESS")
 
-    configuration.logger.log_video(frames, "video")
+    if not headless:
+        frames = []
+        while not (env_state.terminated | env_state.truncated):
+            cpg_state = configuration.controller.controller.act(
+                cpg_state, ControlInput.LEFT, configuration
+            )
+            cpg_state = cpg.step(cpg_state)
+            actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
+            env_state = env.step(actions, env_state)
+            # Skip rendering on HPC
+            frames.append(env.render(env_state))
+
+        configuration.logger.log_video(frames, "video.mp4")
 
     end = time.time()
-    configuration.logger.log({"time": end - start})
+    configuration.logger.log(str(end - start))
