@@ -1,3 +1,5 @@
+import os
+
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.controller.controller_configurations import (
@@ -29,7 +31,7 @@ def render_saved_controller(controller_path: str):
     configuration.logger.init_logger()
 
     controller = configuration.controller.controller
-    controller.read_controller(controller_path)
+    controller.read_controller(os.path.join(controller_path, "controller"))
 
     env = Environment(configuration)
 
