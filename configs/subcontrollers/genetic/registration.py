@@ -1,6 +1,9 @@
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
 from src.genetic_optimization.basic_genetic_optimizer import BasicGeneticOptimizer
+from src.genetic_optimization.crossover_genetic_optimizer import (
+    CrossoverGeneticOptimizer,
+)
 from src.genetic_optimization.evosax_genetic_optimizer import (
     EvoSaxGeneticOptimizer,
 )
@@ -17,7 +20,12 @@ def register():
 
     SubConfigurationMap.add_configuration(
         GeneticConfiguration,
-        GeneticConfiguration("evosax", 128, 10, EvoSaxGeneticOptimizer()),
+        GeneticConfiguration("evosax", 20, 5, EvoSaxGeneticOptimizer()),
+    )
+
+    SubConfigurationMap.add_configuration(
+        GeneticConfiguration,
+        GeneticConfiguration("crossover", 20, 10, CrossoverGeneticOptimizer()),
     )
 
     SubConfigurationMap.add_configuration(

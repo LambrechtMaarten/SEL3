@@ -1,5 +1,3 @@
-import sys
-
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.controller.controller_configurations import (
@@ -13,29 +11,45 @@ from configs.subcontrollers.register import register
 from configs.subcontrollers.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
-from src.render.render_video import render_saved_controller
-from src.simulation.simulate_controller import simulate_controller
-from src.training.train_controller import train_controller
+from src.controller.control_input import ControlInput
+from src.environment.environment import Environment
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(
-            'you need to say "train", "simulate" or "render" as the first arg or it doesn\'t know what to do'
-        )
 
+def render_saved_controller(controller_path: str):
     register()
     configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "standard"),
         SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
         SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
         SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-        SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
+        SubConfigurationMap.get_configuration(GeneticConfiguration, "crossover"),
         SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
     )
 
-    if sys.argv[1] == "train":
-        train_controller(configuration)
-    elif sys.argv[1] == "simulate":
-        simulate_controller(sys.argv[2])
-    elif sys.argv[1] == "render":
-        render_saved_controller(sys.argv[2])
+    configuration.logger.init_logger()
+
+    controller = configuration.controller.controller
+    controller.read_controller(controller_path)
+
+    env = Environment(configuration)
+
+    cpg_generator = configuration.cpg.cpg_generator
+    cpg = cpg_generator.generate(configuration)
+
+    env_state = env.reset(configuration.random.split())
+    cpg_state = cpg.reset()
+
+    frames = []
+
+    while not (env_state.terminated | env_state.truncated):
+        cpg_state = controller.act(cpg_state, ControlInput.LEFT, configuration)
+
+        cpg_state = cpg.step(cpg_state)
+
+        actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
+
+        env_state = env.step(actions, env_state)
+
+        frames.append(env.render(env_state))
+
+    configuration.logger.log_video(frames, "video.mp4")

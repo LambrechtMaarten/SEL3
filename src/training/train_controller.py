@@ -1,6 +1,8 @@
 import os
 import time
 
+import jax
+
 from configs.config import Configuration
 from src.controller.control_input import ControlInput
 from src.environment.environment import Environment
@@ -18,8 +20,12 @@ def train_controller(configuration: Configuration):
         configuration.controller.controller.genome_size(configuration),
         configuration.random.split(),
     )
+    evaluator_fn = configuration.controller.controller.evaluator(
+        configuration, configuration.random.split()
+    )
+    evaluator_fn = jax.jit(evaluator_fn)
     selections, evaluations = genetic_optimizer.generation(
-        configuration.controller.controller.evaluator(configuration),
+        evaluator_fn,
         starting_population,
         configuration.genetic.number_of_generations,
         configuration.random.split(),
