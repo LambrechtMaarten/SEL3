@@ -17,16 +17,26 @@ class Controller(ABC):
     """
 
     @abstractmethod
-    def act(self, cpg_state: CPGState, control_input: ControlInput, configuration: Configuration) -> CPGState:
+    def act(
+        self,
+        cpg_state: CPGState,
+        control_input: ControlInput,
+        configuration: Configuration,
+    ) -> CPGState:
         pass
 
     @abstractmethod
-    def train_controller(self, genetic_selections: jarr, genetic_evaluations: jarr, configuration: Configuration):
+    def train_controller(
+        self,
+        genetic_selections: jarr,
+        genetic_evaluations: jarr,
+        configuration: Configuration,
+    ):
         pass
 
     @staticmethod
     @abstractmethod
-    def evaluator(configuration: Configuration) -> Callable[[jarr], jarr]:
+    def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:
         pass
 
     @abstractmethod
