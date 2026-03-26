@@ -25,12 +25,12 @@ if __name__ == "__main__":
 
     register()
     configuration = Configuration(
-        SubConfigurationMap.get_configuration(Logger, "standard"),
+        SubConfigurationMap.get_configuration(Logger, "wandb"),
         SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
         SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
         SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
         SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-        SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "network"),
     )
 
     if sys.argv[1] == "train":
