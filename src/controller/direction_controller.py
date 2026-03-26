@@ -5,8 +5,8 @@ from jax import numpy as jnp
 
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
-from src.controller.controller import Controller
 from src.controller.control_input import ControlInput
+from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState
 from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
@@ -16,17 +16,28 @@ class DirectionController(Controller):
     def __init__(self):
         self.cpg_map = dict()
 
-    def act(self, cpg_state: CPGState, control_input: ControlInput, configuration: Configuration):
+    def act(
+        self,
+        cpg_state: CPGState,
+        control_input: ControlInput,
+        configuration: Configuration,
+    ):
         cpg_generator = configuration.cpg.cpg_generator
         if control_input == ControlInput.ZZZ:
             return cpg_generator.modulate_body(
                 cpg_state,
-                cpg_generator.body_to_jarr(cpg_generator.generate(configuration).reset())
+                cpg_generator.body_to_jarr(
+                    cpg_generator.generate(configuration).reset()
+                ),
             )
         return cpg_generator.modulate_body(cpg_state, self.cpg_map[control_input])
 
-    def train_controller(self, genetic_selections: jarr, genetic_evaluations: jarr,
-                         configuration: Configuration):
+    def train_controller(
+        self,
+        genetic_selections: jarr,
+        genetic_evaluations: jarr,
+        configuration: Configuration,
+    ):
         all_scores = []
         rng = configuration.random.split()
         for i in range(len(genetic_selections)):
@@ -40,29 +51,42 @@ class DirectionController(Controller):
                 cpg_state = cpg.step(cpg_state)
                 env_state = env.step(
                     cpg_generator.outputs_to_actions(cpg_state.outputs, configuration),
-                    env_state
+                    env_state,
                 )
-            all_scores.append([
-                env_state.observations["disk_position"][0],
-                -env_state.observations["disk_position"][0],
-                env_state.observations["disk_position"][1],
-                -env_state.observations["disk_position"][1],
-                -env_state.observations["disk_rotation"][1],
-                env_state.observations["disk_rotation"][1],
-            ])
+            all_scores.append(
+                [
+                    env_state.observations["disk_position"][0],
+                    -env_state.observations["disk_position"][0],
+                    env_state.observations["disk_position"][1],
+                    -env_state.observations["disk_position"][1],
+                    -env_state.observations["disk_rotation"][1],
+                    env_state.observations["disk_rotation"][1],
+                ]
+            )
 
-        directions = [ControlInput.RIGHT, ControlInput.LEFT, ControlInput.UP, ControlInput.DOWN, ControlInput.TURN_LEFT, ControlInput.TURN_RIGHT]
+        directions = [
+            ControlInput.RIGHT,
+            ControlInput.LEFT,
+            ControlInput.UP,
+            ControlInput.DOWN,
+            ControlInput.TURN_LEFT,
+            ControlInput.TURN_RIGHT,
+        ]
         for i, direction in enumerate(directions):
             max_index = max(range(len(all_scores)), key=lambda j: all_scores[j][i])
             self.cpg_map[direction] = genetic_selections[max_index]
 
     @staticmethod
-    def evaluator(configuration: Configuration) -> Callable[[jarr], jarr]:
+    def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:
+        env = Environment(configuration)
+
         def evaluator(arr: jarr) -> jarr:
             all_scores = []
 
-            def _evaluator(_arr: jarr, _rng: jarr, ):
-                env = Environment(configuration)
+            def _evaluator(
+                _arr: jarr,
+                _rng: jarr,
+            ):
                 env_state = env.reset(_rng)
                 cpg_generator = configuration.cpg.cpg_generator
                 cpg = cpg_generator.generate(configuration)
@@ -70,8 +94,10 @@ class DirectionController(Controller):
                 for _ in range(200):
                     cpg_state = cpg.step(cpg_state)
                     env_state = env.step(
-                        cpg_generator.outputs_to_actions(cpg_state.outputs, configuration),
-                        env_state
+                        cpg_generator.outputs_to_actions(
+                            cpg_state.outputs, configuration
+                        ),
+                        env_state,
                     )
                 return [
                     env_state.observations["disk_position"][0],
@@ -106,15 +132,33 @@ class DirectionController(Controller):
         return cpg_generator.body_to_jarr(cpg.reset()).size
 
     def save_controller(self, logger: Logger):
-        for direction in [ControlInput.RIGHT, ControlInput.LEFT, ControlInput.UP, ControlInput.DOWN, ControlInput.TURN_LEFT, ControlInput.TURN_RIGHT]:
+        for direction in [
+            ControlInput.RIGHT,
+            ControlInput.LEFT,
+            ControlInput.UP,
+            ControlInput.DOWN,
+            ControlInput.TURN_LEFT,
+            ControlInput.TURN_RIGHT,
+        ]:
             # noinspection PyTypeChecker
+            # Standard logger needs string, but wandb does not :(
             logger.log_controller(self.cpg_map[direction])
 
     def read_controller(self, path: str):
         with open(path, "r") as f:
             arrays = f.read()
-            jnp_array = jnp.array([float(x) for x in arrays.replace("[", " ").replace("]", " ").split()])
+            jnp_array = jnp.array(
+                [float(x) for x in arrays.replace("[", " ").replace("]", " ").split()]
+            )
             jnp_array = jnp.reshape(jnp_array, (6, -1))
             for i, direction in enumerate(
-                    [ControlInput.RIGHT, ControlInput.LEFT, ControlInput.UP, ControlInput.DOWN, ControlInput.TURN_LEFT, ControlInput.TURN_RIGHT]):
+                [
+                    ControlInput.RIGHT,
+                    ControlInput.LEFT,
+                    ControlInput.UP,
+                    ControlInput.DOWN,
+                    ControlInput.TURN_LEFT,
+                    ControlInput.TURN_RIGHT,
+                ]
+            ):
                 self.cpg_map[direction] = jnp_array[i]
