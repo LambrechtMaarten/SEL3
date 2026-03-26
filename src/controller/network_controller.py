@@ -3,6 +3,7 @@ from typing import Callable
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
@@ -80,7 +81,6 @@ def flatten_params(params) -> jarr:
     leaves = jax.tree_util.tree_leaves(params)
     return jnp.concatenate([leaf.ravel() for leaf in leaves])
 
-
 def unflatten_params(flat: jarr, template) -> dict:
     """Restores a flat array into the original nested parameter structure.
 
@@ -93,7 +93,8 @@ def unflatten_params(flat: jarr, template) -> dict:
     """
     leaves, treedef = jax.tree_util.tree_flatten(template)
     sizes = [leaf.size for leaf in leaves]
-    split_points = jnp.cumsum(jnp.array(sizes[:-1]))
+    # Gebruik numpy i.p.v. jnp zodat split_points concrete waarden zijn
+    split_points = np.cumsum(np.array(sizes[:-1]))
     flat_leaves = jnp.split(flat, split_points)
     reshaped = [f.reshape(l.shape) for f, l in zip(flat_leaves, leaves)]
     return jax.tree_util.tree_unflatten(treedef, reshaped)
