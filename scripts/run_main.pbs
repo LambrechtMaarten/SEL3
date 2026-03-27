@@ -1,8 +1,7 @@
 #PBS -l nodes=1:ppn=1
 #PBS -l gpus=1
-#PBS -l walltime=01:20:00
+#PBS -l walltime=02:20:00
 #PBS -m abe
-#PBS -M maalambr.lambrecht@ugent.be
 #PBS -o main.out 
 #PBS -e main.err
 
@@ -14,13 +13,21 @@ echo "Loading modules"
 ml load GCCcore/12.3.0 
 ml load Python/3.11.3-GCCcore-12.3.0 
 ml load FFmpeg/6.0-GCCcore-12.3.0
-module load CUDA/12.8.0
+module load CUDA/12.1.1
+module load cuDNN/8.9.2.26-CUDA-12.1.1
+
+export HEADLESS=True
 
 # Venv for the cluster running this script on should have already been made
 # For each cluster a separate venv needs to be created, see env_script.sh
 echo "Starting venv"
 source venv/sel3_${VSC_INSTITUTE_CLUSTER}/bin/activate
 
+hostname
+module list
+echo $CUDA_HOME
+ls $CUDA_HOME/lib64 | grep cusparse
+
 echo "Starting main.py"
 
-PYTHONPATH=. python src/main.py
+PYTHONPATH=. python -u src/main.py train
