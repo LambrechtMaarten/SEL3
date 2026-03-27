@@ -46,6 +46,5 @@ class GeneticOptimizer(ABC):
             evaluations = evaluator(population)
             selections, state = self.select(population, evaluations, __rng, state)
             logger.log_genetic_generation(population, evaluations, selections)
-            logger.log(f"{i}:\t{jnp.max(evaluations)}")
 
         return selections, evaluations

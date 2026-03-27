@@ -4,6 +4,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax import lax
 
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
@@ -92,12 +93,15 @@ def unflatten_params(flat: jarr, template) -> dict:
         Nested parameter dictionary matching the template structure.
     """
     leaves, treedef = jax.tree_util.tree_flatten(template)
-    sizes = [leaf.size for leaf in leaves]
-    # Gebruik numpy i.p.v. jnp zodat split_points concrete waarden zijn
-    split_points = np.cumsum(np.array(sizes[:-1]))
-    flat_leaves = jnp.split(flat, split_points)
-    reshaped = [f.reshape(l.shape) for f, l in zip(flat_leaves, leaves)]
-    return jax.tree_util.tree_unflatten(treedef, reshaped)
+    
+    result = []
+    offset = 0
+    for leaf in leaves:
+        size = int(np.prod(np.array(leaf.shape)))  # concrete numpy, geen jnp
+        result.append(lax.dynamic_slice(flat, (offset,), (size,)).reshape(leaf.shape))
+        offset += size
+    
+    return jax.tree_util.tree_unflatten(treedef, result)
 
 
 class NetworkController(Controller):
