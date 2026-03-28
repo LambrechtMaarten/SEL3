@@ -56,7 +56,7 @@ def train_controller(configuration: Configuration):
             # Skip rendering on HPC
             frames.append(env.render(env_state))
 
-        configuration.logger.log_video(frames, "video.mp4")
+        configuration.logger.log_video(frames, "video")
 
     end = time.time()
-    configuration.logger.log(str(end - start))
+    configuration.logger.log({"time": str(end - start)})
