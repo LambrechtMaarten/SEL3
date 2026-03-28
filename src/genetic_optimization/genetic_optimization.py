@@ -45,6 +45,6 @@ class GeneticOptimizer(ABC):
                 population, state = self.reproduce(selections, evaluations, _rng, state)
             evaluations = evaluator(population)
             selections, state = self.select(population, evaluations, __rng, state)
-            logger.log_genetic_generation(population, evaluations, selections)
+            logger.log_genetic_generation(population, selections, evaluations)
 
         return selections, evaluations
