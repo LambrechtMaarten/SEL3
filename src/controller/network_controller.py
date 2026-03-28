@@ -78,15 +78,16 @@ def flatten_params(params) -> jarr:
     Returns:
         Flat JAX array containing all network weights.
     """
-    leaves, _ = jax.tree_util.tree_flatten(params)
+    leaves = jax.tree_util.tree_leaves(params)
     return jnp.concatenate([leaf.ravel() for leaf in leaves])
 
 
 def make_unflatten_fn(template):
     """Creates a function that unflattens a flat array into a parameter structure.
 
-    Uses the exact same tree traversal order as flatten_params to ensure
-    consistency between flattening and unflattening.
+    By pre-computing the sizes and treedef outside of vmap, the returned
+    function only uses concrete Python integers for slicing, which is
+    compatible with jax.vmap and jax.jit.
 
     Args:
         template: Template parameter structure from Flax init.
@@ -96,16 +97,9 @@ def make_unflatten_fn(template):
         parameter dictionary matching the template structure.
     """
     leaves, treedef = jax.tree_util.tree_flatten(template)
-
-    # Print voor debugging
-    for i, leaf in enumerate(leaves):
-        print(f"leaf {i}: shape={leaf.shape}, size={leaf.size}")
-
     sizes = [int(np.prod(np.array(leaf.shape))) for leaf in leaves]
     shapes = [leaf.shape for leaf in leaves]
-    offsets = [int(x) for x in [0] + list(np.cumsum(sizes[:-1]))]
-
-    print(f"Total params: {sum(sizes)}, offsets: {offsets}")
+    offsets = [0] + list(np.cumsum(sizes[:-1]))
 
     def unflatten(flat: jarr) -> dict:
         result = [
