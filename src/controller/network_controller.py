@@ -4,7 +4,6 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import lax
 
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
@@ -44,17 +43,17 @@ class CPGNetwork(nn.Module):
 
 
 CONTROL_INPUT_TO_ANGLE = {
-    ControlInput.RIGHT:      0.0,
-    ControlInput.UP:         jnp.pi / 2,
-    ControlInput.LEFT:       jnp.pi,
-    ControlInput.DOWN:       3 * jnp.pi / 2,
+    ControlInput.RIGHT: 0.0,
+    ControlInput.UP:    jnp.pi / 2,
+    ControlInput.LEFT:  jnp.pi,
+    ControlInput.DOWN:  3 * jnp.pi / 2,
 }
 
 TRAINING_DIRECTIONS = [
-    (ControlInput.RIGHT,      0.0),
-    (ControlInput.UP,         jnp.pi / 2),
-    (ControlInput.LEFT,       jnp.pi),
-    (ControlInput.DOWN,       3 * jnp.pi / 2),
+    (ControlInput.RIGHT, 0.0),
+    (ControlInput.UP,    jnp.pi / 2),
+    (ControlInput.LEFT,  jnp.pi),
+    (ControlInput.DOWN,  3 * jnp.pi / 2),
 ]
 
 
@@ -82,26 +81,34 @@ def flatten_params(params) -> jarr:
     leaves = jax.tree_util.tree_leaves(params)
     return jnp.concatenate([leaf.ravel() for leaf in leaves])
 
-def unflatten_params(flat: jarr, template) -> dict:
-    """Restores a flat array into the original nested parameter structure.
+
+def make_unflatten_fn(template):
+    """Creates a function that unflattens a flat array into a parameter structure.
+
+    By pre-computing the sizes and treedef outside of vmap, the returned
+    function only uses concrete Python integers for slicing, which is
+    compatible with jax.vmap and jax.jit.
 
     Args:
-        flat: Flat JAX array of network weights.
         template: Template parameter structure from Flax init.
 
     Returns:
-        Nested parameter dictionary matching the template structure.
+        A function that takes a flat JAX array and returns a nested
+        parameter dictionary matching the template structure.
     """
     leaves, treedef = jax.tree_util.tree_flatten(template)
-    
-    result = []
-    offset = 0
-    for leaf in leaves:
-        size = int(np.prod(np.array(leaf.shape)))  # concrete numpy, geen jnp
-        result.append(lax.dynamic_slice(flat, (offset,), (size,)).reshape(leaf.shape))
-        offset += size
-    
-    return jax.tree_util.tree_unflatten(treedef, result)
+    sizes = [int(np.prod(np.array(leaf.shape))) for leaf in leaves]
+    shapes = [leaf.shape for leaf in leaves]
+    offsets = [0] + list(np.cumsum(sizes[:-1]))
+
+    def unflatten(flat: jarr) -> dict:
+        result = [
+            flat[offset:offset + size].reshape(shape)
+            for offset, size, shape in zip(offsets, sizes, shapes)
+        ]
+        return jax.tree_util.tree_unflatten(treedef, result)
+
+    return unflatten
 
 
 class NetworkController(Controller):
@@ -176,7 +183,8 @@ class NetworkController(Controller):
 
         theta = CONTROL_INPUT_TO_ANGLE.get(control_input, 0.0)
         direction_vector = angle_to_vector(theta)
-        params = unflatten_params(self.weights, self._template_params)
+        unflatten = make_unflatten_fn(self._template_params)
+        params = unflatten(self.weights)
         cpg_params = self.network.apply(params, direction_vector)
         return cpg_generator.modulate_body(cpg_state, cpg_params)
 
@@ -197,9 +205,7 @@ class NetworkController(Controller):
         """
         self._init_network(configuration)
         best_idx = jnp.argmax(genetic_evaluations)
-        self.weights = unflatten_params(
-            genetic_selections[best_idx], self._template_params
-        )
+        self.weights = genetic_selections[best_idx]
 
     @staticmethod
     def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:
@@ -218,12 +224,13 @@ class NetworkController(Controller):
             (population_size, genome_size) to a fitness array of
             shape (population_size,).
         """
-        dummy_network = CPGNetwork(
-            num_cpg_params=configuration.cpg.cpg_generator.body_to_jarr(
-                configuration.cpg.cpg_generator.generate(configuration).reset()
-            ).size
-        )
+        cpg_generator = configuration.cpg.cpg_generator
+        cpg_template = cpg_generator.generate(configuration)
+        num_cpg_params = cpg_generator.body_to_jarr(cpg_template.reset()).size
+
+        dummy_network = CPGNetwork(num_cpg_params=num_cpg_params)
         template_params = dummy_network.init(jax.random.PRNGKey(0), jnp.zeros(2))
+        unflatten = make_unflatten_fn(template_params)
 
         def evaluator(arr: jarr) -> jarr:
             """Evaluates all genomes across all training directions.
@@ -236,26 +243,24 @@ class NetworkController(Controller):
             """
             env = Environment(configuration)
 
-            def _evaluate_genome(_flat_weights: jarr, _rng: jarr) -> float:
+            def _evaluate_genome(flat_weights: jarr, _rng: jarr) -> float:
                 """Evaluates a single genome across all training directions.
 
                 Args:
-                    _flat_weights: Flat array of network weights.
+                    flat_weights: Flat array of network weights.
                     _rng: A JAX random key for environment reset.
 
                 Returns:
                     Total fitness score summed over all directions.
                 """
-                params = unflatten_params(_flat_weights, template_params)
+                params = unflatten(flat_weights)
                 total_score = 0.0
 
-                for control_input, theta in TRAINING_DIRECTIONS:
+                for _, theta in TRAINING_DIRECTIONS:
                     _rng, subkey = jax.random.split(_rng)
                     env_state = env.reset(subkey)
 
-                    cpg_generator = configuration.cpg.cpg_generator
                     cpg = cpg_generator.generate(configuration)
-
                     direction_vector = angle_to_vector(theta)
                     cpg_params = dummy_network.apply(params, direction_vector)
                     cpg_state = cpg_generator.modulate_body(cpg.reset(), cpg_params)
@@ -285,7 +290,6 @@ class NetworkController(Controller):
                         )
                         dx = env_state.observations["disk_position"][0] - start_x
                         dy = env_state.observations["disk_position"][1] - start_y
-                        # Score = displacement in desired direction
                         score = score + dx * expected_dx + dy * expected_dy
                         return cpg_state, env_state, score
 
@@ -320,8 +324,7 @@ class NetworkController(Controller):
         Args:
             logger: The logger to write the network weights to.
         """
-        flat = flatten_params(self.weights)
-        logger.log_controller(flat)
+        logger.log_controller(self.weights)
 
     def read_controller(self, path: str):
         """Loads previously trained network weights from a file.
@@ -331,7 +334,6 @@ class NetworkController(Controller):
         """
         with open(path, "r") as f:
             arrays = f.read()
-            flat = jnp.array(
+            self.weights = jnp.array(
                 [float(x) for x in arrays.replace("[", " ").replace("]", " ").split()]
             )
-            self.weights = unflatten_params(flat, self._template_params)
