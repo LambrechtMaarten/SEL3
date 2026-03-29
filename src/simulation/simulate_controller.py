@@ -26,36 +26,22 @@ def simulate_controller(output_path: str):
 
     configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "silent_logger"),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, SimulationConfiguration
-        ),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, CPGConfiguration
-        ),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, RandomConfiguration
-        ),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, GeneticConfiguration
-        ),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, ControllerConfiguration
-        ),
+        SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "network"),
     )
     env = Environment(configuration)
     cpg_generator = configuration.cpg.cpg_generator
+    # Initialiseer het netwerk voor read_controller
+    configuration.controller.controller._init_network(configuration)
     configuration.controller.controller.read_controller(
         os.path.join(output_path, "controller")
     )
     cpg = cpg_generator.generate(configuration)
     env_state = env.reset(configuration.random.split())
     cpg_state = cpg.reset()
-
-    # Initialiseer het netwerk voor read_controller
-    configuration.controller.controller._init_network(configuration)
-    configuration.controller.controller.read_controller(
-        os.path.join(output_path, "controller")
-    )
 
     while True:
         key = -1
