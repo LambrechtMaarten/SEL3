@@ -20,9 +20,6 @@ from src.environment.environment import Environment
 
 
 def simulate_controller(output_path: str):
-    configuration_json = ""
-    with open(os.path.join(output_path, "configuration.json"), "r") as f:
-        configuration_json = f.read()
 
     configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "silent_logger"),
