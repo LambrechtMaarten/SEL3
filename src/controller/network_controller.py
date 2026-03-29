@@ -412,7 +412,15 @@ class NetworkController(Controller):
         Args:
             logger: The logger to write the network weights to.
         """
-        logger.log_controller(self.weights)
+        # threshold=inf zorgt dat numpy nooit afkapt met ...
+        flat = self.weights
+        string = np.array2string(
+            np.array(flat),
+            max_line_width=np.inf,
+            threshold=np.inf,
+            precision=8
+        )
+        logger.log_controller(string)
 
     def read_controller(self, path: str):
         """Loads previously trained network weights from a file.
@@ -422,12 +430,10 @@ class NetworkController(Controller):
         """
         with open(path, "r") as f:
             arrays = f.read()
-            # Verwijder alle mogelijke formatting tekens
             cleaned = (arrays
                     .replace("[", " ")
                     .replace("]", " ")
                     .replace("\n", " ")
                     .replace("\r", " "))
-            # Filter lege strings na het splitten
-            values = [x for x in cleaned.split() if x]
+            values = [x for x in cleaned.split() if x and x != "..."]
             self.weights = jnp.array([float(x) for x in values])
