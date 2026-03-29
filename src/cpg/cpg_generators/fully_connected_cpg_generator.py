@@ -1,0 +1,23 @@
+from jax import numpy as jnp
+
+from configs.config import Configuration
+from src.cpg.cpg import CPG
+from src.cpg.cpg_generators.cpg_generators import CPGGenerator
+from src.jax_extra.jax_extra import jarr
+
+
+class FullyConnectedCPGGenerator(CPGGenerator):
+    """
+    This class has 2 generators per motor
+    """
+
+    def generate(self, configuration: Configuration) -> CPG:
+        morphology = configuration.simulation.morphology_configuration
+        adjacency_matrix = jnp.ones((
+            2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0],
+            2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0]))
+
+        return CPG(1 * adjacency_matrix, configuration)
+
+    def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
+        return outputs

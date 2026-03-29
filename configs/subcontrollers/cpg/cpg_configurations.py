@@ -1,5 +1,5 @@
 from configs.subconfiguration import SubConfiguration
-from src.cpg.cpg_generators import CPGGenerator
+from src.cpg.cpg_generators.cpg_generators import CPGGenerator
 
 
 class CPGConfiguration(SubConfiguration):

@@ -42,8 +42,7 @@ class OneDirectionController(Controller):
         genetic_evaluations: jarr,
         configuration: Configuration,
     ):
-        best_idx = jnp.argmax(genetic_evaluations)
-        self.body_cpg = genetic_selections[best_idx]
+        self.body_cpg = genetic_selections[jnp.argmax(genetic_evaluations)]
 
     @staticmethod
     def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:
@@ -55,7 +54,6 @@ class OneDirectionController(Controller):
                 cpg_generator = configuration.cpg.cpg_generator
                 cpg = cpg_generator.generate(configuration)
                 cpg_state = cpg_generator.modulate_body(cpg.reset(), _arr)
-                start_x = env_state.observations["disk_position"][0]
 
                 score = 0.0
 
@@ -70,7 +68,7 @@ class OneDirectionController(Controller):
                         ),
                         env_state,
                     )
-                    delta_x = env_state.observations["disk_position"][0] - start_x
+                    delta_x = env_state.observations["disk_position"][0]
                     # Penalty for movement in wrong direction
                     side_penalty = 0.3 * jnp.abs(
                         env_state.observations["disk_position"][1]

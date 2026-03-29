@@ -1,6 +1,7 @@
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
-from src.cpg.cpg_generators import BasicCPGGenerator, FullyConnectedCPGGenerator
+from src.cpg.cpg_generators.fully_connected_cpg_generator import FullyConnectedCPGGenerator
+from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
 
 
 def register():
