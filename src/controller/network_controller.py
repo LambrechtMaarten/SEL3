@@ -13,6 +13,28 @@ from src.cpg.cpg_state import CPGState
 from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
 
+NATURAL_DIRECTIONS = [
+    0.0,                  # 0°   arm 0 leidt
+    2 * jnp.pi / 5,      # 72°  arm 1 leidt
+    4 * jnp.pi / 5,      # 144° arm 2 leidt
+    6 * jnp.pi / 5,      # 216° arm 3 leidt
+    8 * jnp.pi / 5,      # 288° arm 4 leidt
+]
+
+TRAINING_DIRECTIONS = [
+    (ControlInput.RIGHT, 0.0),
+    (ControlInput.UP,    jnp.pi / 2),
+    (ControlInput.LEFT,  jnp.pi),
+    (ControlInput.DOWN,  3 * jnp.pi / 2),
+]
+
+CONTROL_INPUT_TO_ANGLE = {
+    ControlInput.RIGHT: 0.0,
+    ControlInput.UP:    jnp.pi / 2,
+    ControlInput.LEFT:  jnp.pi,
+    ControlInput.DOWN:  3 * jnp.pi / 2,
+}
+
 
 class CPGNetwork(nn.Module):
     """Small MLP that maps a direction vector to CPG parameters.
@@ -42,21 +64,6 @@ class CPGNetwork(nn.Module):
         return x
 
 
-CONTROL_INPUT_TO_ANGLE = {
-    ControlInput.RIGHT: 0.0,
-    ControlInput.UP:    jnp.pi / 2,
-    ControlInput.LEFT:  jnp.pi,
-    ControlInput.DOWN:  3 * jnp.pi / 2,
-}
-
-TRAINING_DIRECTIONS = [
-    (ControlInput.RIGHT, 0.0),
-    (ControlInput.UP,    jnp.pi / 2),
-    (ControlInput.LEFT,  jnp.pi),
-    (ControlInput.DOWN,  3 * jnp.pi / 2),
-]
-
-
 def angle_to_vector(theta: float) -> jarr:
     """Converts a direction angle to a unit vector.
 
@@ -78,7 +85,7 @@ def flatten_params(params) -> jarr:
     Returns:
         Flat JAX array containing all network weights.
     """
-    leaves = jax.tree_util.tree_leaves(params)
+    leaves, _ = jax.tree_util.tree_flatten(params)
     return jnp.concatenate([leaf.ravel() for leaf in leaves])
 
 
@@ -99,7 +106,7 @@ def make_unflatten_fn(template):
     leaves, treedef = jax.tree_util.tree_flatten(template)
     sizes = [int(np.prod(np.array(leaf.shape))) for leaf in leaves]
     shapes = [leaf.shape for leaf in leaves]
-    offsets = [0] + list(np.cumsum(sizes[:-1]))
+    offsets = [int(x) for x in [0] + list(np.cumsum(sizes[:-1]))]
 
     def unflatten(flat: jarr) -> dict:
         result = [
@@ -119,13 +126,17 @@ class NetworkController(Controller):
     and outputs CPG parameters directly. This allows continuous interpolation
     between directions — any angle θ works, not just the trained directions.
 
-    The network weights are the genome optimized by the genetic algorithm.
-    The fitness function evaluates the network across multiple directions
-    simultaneously.
+    Training happens in two phases:
+        1. Pre-training: gradient descent on the 5 natural directions of
+           the brittle star using the known optimal CPG parameters rotated
+           via symmetry.
+        2. Genetic optimization: fine-tuning the network weights to
+           interpolate correctly for the 4 cardinal directions.
 
     Attributes:
         network: The CPGNetwork MLP instance.
-        weights: The trained network weights, or None before training.
+        weights: The trained network weights as a flat array, or None
+            before training.
         _template_params: Template parameter structure used for
             flattening and unflattening the genome.
     """
@@ -152,6 +163,83 @@ class NetworkController(Controller):
         self._template_params = self.network.init(
             jax.random.PRNGKey(0), jnp.zeros(2)
         )
+
+    def pretrain_from_cpg(
+            self,
+            cpg_params_right: jarr,
+            configuration: Configuration,
+            learning_rate: float = 0.01,
+            steps: int = 1000):
+        """Pre-trains the network on the 5 natural directions using symmetry.
+
+        Uses the known RIGHT solution and rotates it for each of the 5
+        natural directions of the brittle star (every 72°). The network
+        learns to map each natural direction to the correct CPG parameters
+        before the genetic optimization starts.
+
+        After this pre-training, the genetic optimization will fine-tune
+        the network to interpolate between the natural directions for the
+        4 cardinal directions.
+
+        Args:
+            cpg_params_right: The flat CPG parameter array for the RIGHT
+                direction, loaded from a previously trained controller.
+            configuration: The current training configuration.
+            learning_rate: Learning rate for Adam optimizer.
+            steps: Number of gradient descent steps.
+        """
+        import optax
+
+        self._init_network(configuration)
+        cpg_generator = configuration.cpg.cpg_generator
+        cpg = cpg_generator.generate(configuration)
+
+        # Bouw training pairs voor de 5 natuurlijke richtingen
+        training_pairs = []
+        for i, theta in enumerate(NATURAL_DIRECTIONS):
+            direction_vector = angle_to_vector(theta)
+
+            # Roteer de CPG-params via symmetrie
+            cpg_state = cpg_generator.modulate_body(cpg.reset(), cpg_params_right)
+            perm = jnp.roll(jnp.arange(10), shift=i * 2)
+            rotated_state = cpg_state.replace(
+                amplitude_goals=cpg_state.amplitude_goals[perm],
+                offset_goals=cpg_state.offset_goals[perm],
+                coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm]
+            )
+            rotated_params = cpg_generator.body_to_jarr(rotated_state)
+            training_pairs.append((direction_vector, rotated_params))
+            print(f"Richting {i} ({float(jnp.degrees(theta)):.1f}°): params klaar")
+
+        # Loss = MSE over alle 5 richtingen
+        def loss_fn(params):
+            total_loss = 0.0
+            for direction_vector, target_params in training_pairs:
+                output = self.network.apply(params, direction_vector)
+                total_loss += jnp.mean((output - target_params) ** 2)
+            return total_loss / len(training_pairs)
+
+        # Gradient descent via Adam
+        optimizer = optax.adam(learning_rate)
+        params = self._template_params
+        opt_state = optimizer.init(params)
+
+        @jax.jit
+        def step(params, opt_state):
+            loss, grads = jax.value_and_grad(loss_fn)(params)
+            updates, new_opt_state = optimizer.update(grads, opt_state)
+            new_params = optax.apply_updates(params, updates)
+            return new_params, new_opt_state, loss
+
+        print("Start pre-training op 5 natuurlijke richtingen...")
+        for i in range(steps):
+            params, opt_state, loss = step(params, opt_state)
+            if i % 100 == 0:
+                print(f"  Stap {i}/{steps}: loss = {float(loss):.6f}")
+
+        self._template_params = params
+        self.weights = flatten_params(params)
+        print("Pre-training voltooid!")
 
     def act(
         self,
