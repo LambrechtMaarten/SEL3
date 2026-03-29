@@ -51,6 +51,12 @@ def simulate_controller(output_path: str):
     env_state = env.reset(configuration.random.split())
     cpg_state = cpg.reset()
 
+    # Initialiseer het netwerk voor read_controller
+    configuration.controller.controller._init_network(configuration)
+    configuration.controller.controller.read_controller(
+        os.path.join(output_path, "controller")
+    )
+
     while True:
         key = -1
         while True:
@@ -67,8 +73,6 @@ def simulate_controller(output_path: str):
             ord("s"): ControlInput.DOWN,
             ord("q"): ControlInput.LEFT,
             ord("d"): ControlInput.RIGHT,
-            ord("a"): ControlInput.TURN_LEFT,
-            ord("e"): ControlInput.TURN_RIGHT,
         }.get(key, ControlInput.ZZZ)
 
         cpg_state = configuration.controller.controller.act(
