@@ -422,6 +422,12 @@ class NetworkController(Controller):
         """
         with open(path, "r") as f:
             arrays = f.read()
-            self.weights = jnp.array(
-                [float(x) for x in arrays.replace("[", " ").replace("]", " ").split()]
-            )
+            # Verwijder alle mogelijke formatting tekens
+            cleaned = (arrays
+                    .replace("[", " ")
+                    .replace("]", " ")
+                    .replace("\n", " ")
+                    .replace("\r", " "))
+            # Filter lege strings na het splitten
+            values = [x for x in cleaned.split() if x]
+            self.weights = jnp.array([float(x) for x in values])
