@@ -42,7 +42,7 @@ if __name__ == "__main__":
             sys.exit(1)
 
         configuration = Configuration(
-            SubConfigurationMap.get_configuration(Logger, "standard"),
+            SubConfigurationMap.get_configuration(Logger, "wandb"),
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
