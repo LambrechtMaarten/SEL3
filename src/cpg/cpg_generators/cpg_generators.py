@@ -8,11 +8,6 @@ from src.cpg.cpg_state import CPGState
 from src.jax_extra.jax_extra import jarr
 
 
-# T_i = x_i + r_i * cos(F_i) = output
-# r_i'' => approaches R_i
-# x_i'' => approaches X_i
-# F_i' = o_i + sum(j, w_ij * r_j * sin(F_j - F_i - b_ij))
-
 class CPGGenerator(ABC):
     """
     This class represents a specific CPG configuration, specifying how oscilators map to actuarors
@@ -24,6 +19,10 @@ class CPGGenerator(ABC):
 
     @abstractmethod
     def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
+        pass
+
+    @abstractmethod
+    def modulate_symmetric_rotation(self, cpg_state: CPGState, clockwise_rotations: int) -> CPGState:
         pass
 
     @staticmethod
@@ -53,17 +52,3 @@ class CPGGenerator(ABC):
             cpg_state.offset_goals,
             cpg_state.coupled_phase_biases.ravel()
         ]).flatten()
-
-    # todo
-    # @abstractmethod
-    # def modulate_arm(self, cpg_state, arm: jarr):
-    #     pass
-    #
-    # def arm_to_jarr(self, arm: int):
-    #     pass
-    #
-    # @abstractmethod
-    # def modulate_oscilator(self, cpg_state, oscilator: jarr):
-    #     pass
-
-

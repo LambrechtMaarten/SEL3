@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Callable
 
+from moojoco.environment.base import BaseEnvState
+
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
 from src.controller.control_input import ControlInput
@@ -22,6 +24,7 @@ class Controller(ABC):
         cpg_state: CPGState,
         control_input: ControlInput,
         configuration: Configuration,
+        env_state: BaseEnvState,
     ) -> CPGState:
         pass
 

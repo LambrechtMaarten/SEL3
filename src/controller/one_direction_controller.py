@@ -1,7 +1,9 @@
+import math
 from typing import Callable
 
 import jax
 from jax import numpy as jnp
+from moojoco.environment.base import BaseEnvState
 
 from configs.config import Configuration
 from configs.subcontrollers.logger.logger import Logger
@@ -25,6 +27,7 @@ class OneDirectionController(Controller):
         cpg_state: CPGState,
         control_input: ControlInput,
         configuration: Configuration,
+        env_state: BaseEnvState,
     ):
         cpg_generator = configuration.cpg.cpg_generator
         if control_input == ControlInput.ZZZ:
@@ -34,7 +37,13 @@ class OneDirectionController(Controller):
                     cpg_generator.generate(configuration).reset()
                 ),
             )
-        return cpg_generator.modulate_body(cpg_state, self.body_cpg)
+
+        rotation = env_state.observations["disk_rotation"][2]
+        wanted_direction = control_input.value
+        rotated_direction = ((wanted_direction - rotation) % (2*math.pi) + (2*math.pi)) % (2*math.pi)
+        index = int(rotated_direction/(2*math.pi)*5)
+        print(rotation, wanted_direction, rotated_direction, index)
+        return cpg_generator.modulate_symmetric_rotation(cpg_generator.modulate_body(cpg_state, self.body_cpg), index)
 
     def train_controller(
         self,

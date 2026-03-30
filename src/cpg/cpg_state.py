@@ -5,6 +5,11 @@ from jax import numpy as jnp
 
 from src.jax_extra.jax_extra import jarr
 
+# T_i = x_i + r_i * cos(F_i) = output
+# r_i'' => approaches R_i
+# x_i'' => approaches X_i
+# F_i' = o_i + sum(j, w_ij * r_j * sin(F_j - F_i - b_ij))
+
 
 @struct.dataclass
 class CPGState:

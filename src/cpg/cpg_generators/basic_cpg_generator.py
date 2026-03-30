@@ -48,6 +48,23 @@ class BasicCPGGenerator(CPGGenerator):
         actions = cpg_outputs_per_segment.flatten()
         return actions
 
+    def modulate_symmetric_rotation(self, cpg_state: CPGState, clockwise_rotations: int) -> CPGState:
+        # to rotate, the offsets and amplitudes have to be rolled and the coupled_phase_bias matrix needs to be rolled
+
+        shift = 2 * clockwise_rotations
+
+        def permute_vec(x):
+            return jnp.roll(x, shift)
+
+        def permute_mat(x):
+            return jnp.roll(jnp.roll(x, shift, axis=0), shift, axis=1)
+
+        return cpg_state.replace(
+            amplitude_goals=permute_vec(cpg_state.amplitude_goals),
+            offset_goals=permute_vec(cpg_state.offset_goals),
+            coupled_phase_biases=permute_mat(cpg_state.coupled_phase_biases),
+        )
+
     @staticmethod
     def modulate_cpg(
             cpg_state: CPGState,

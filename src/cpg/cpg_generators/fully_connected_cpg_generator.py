@@ -3,6 +3,7 @@ from jax import numpy as jnp
 from configs.config import Configuration
 from src.cpg.cpg import CPG
 from src.cpg.cpg_generators.cpg_generators import CPGGenerator
+from src.cpg.cpg_state import CPGState
 from src.jax_extra.jax_extra import jarr
 
 
@@ -21,3 +22,6 @@ class FullyConnectedCPGGenerator(CPGGenerator):
 
     def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
         return outputs
+
+    def modulate_symmetric_rotation(self, cpg_state: CPGState, clockwise_rotations: int) -> CPGState:
+        raise Exception("Not implemented")
