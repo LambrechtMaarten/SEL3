@@ -20,6 +20,11 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
     The genome size is determined dynamically from the population shape,
     making this optimizer compatible with any controller.
 
+    When a pre-trained population is provided (e.g. from NetworkController
+    pre-training), the strategy is initialized around the mean of that
+    population instead of a random solution, ensuring the pre-trained
+    weights are effectively used as a warm start.
+
     Attributes:
         es: The EvoSax PGPE strategy instance, initialized on first call.
         params: The EvoSax strategy hyperparameters.
@@ -38,6 +43,8 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
 
         Initializes the EvoSax strategy on the first call using the
         genome size derived dynamically from the population shape.
+        Uses the mean of the provided population as the initial solution,
+        so pre-trained weights are used as a warm start when available.
         On subsequent calls, updates the strategy distribution using
         the current population and fitness scores.
 
@@ -54,10 +61,12 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
         """
         if self.es is None:
             population_size = population.shape[0]
-            genome_size = population.shape[1]  # dynamisch, geen hardcoded structuur
 
-            _, subkey = jax.random.split(rng)
-            solution = jax.random.normal(subkey, (genome_size,)) * 0.01
+            # Gebruik het gemiddelde van de populatie als startpunt
+            # zodat pre-getrainde gewichten effectief worden gebruikt
+            # als warm start. Bij random initialisatie is dit gewoon
+            # het gemiddelde van een normale verdeling ≈ 0.
+            solution = jnp.mean(population, axis=0)
 
             self.es = ES(population_size, solution)
             self.params = self.es.default_params.replace(

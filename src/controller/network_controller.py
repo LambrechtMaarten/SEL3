@@ -12,6 +12,7 @@ from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState
 from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
+from pathlib import Path
 
 NATURAL_DIRECTIONS = [
     0.0,                  # 0°   arm 0 leidt
@@ -412,15 +413,14 @@ class NetworkController(Controller):
         Args:
             logger: The logger to write the network weights to.
         """
-        # threshold=inf zorgt dat numpy nooit afkapt met ...
-        flat = self.weights
-        string = np.array2string(
-            np.array(flat),
-            max_line_width=np.inf,
-            threshold=np.inf,
-            precision=8
-        )
-        logger.log_controller(string)
+
+        flat = np.array(self.weights)
+        path = Path(logger.base_folder) / "controller"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Schrijf direct naar bestand, omzeil logger volledig
+        with open(path, "w") as f:
+            f.write(" ".join([f"{x:.8f}" for x in flat.ravel()]))
 
     def read_controller(self, path: str):
         """Loads previously trained network weights from a file.
@@ -429,11 +429,5 @@ class NetworkController(Controller):
             path: Path to the file containing the network weights.
         """
         with open(path, "r") as f:
-            arrays = f.read()
-            cleaned = (arrays
-                    .replace("[", " ")
-                    .replace("]", " ")
-                    .replace("\n", " ")
-                    .replace("\r", " "))
-            values = [x for x in cleaned.split() if x and x != "..."]
-            self.weights = jnp.array([float(x) for x in values])
+            values = f.read().split()
+            self.weights = jnp.array([float(x) for x in values if x])
