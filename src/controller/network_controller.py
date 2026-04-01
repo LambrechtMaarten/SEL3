@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Callable
 
 import flax.linen as nn
@@ -12,28 +13,27 @@ from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState
 from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
-from pathlib import Path
 
 NATURAL_DIRECTIONS = [
-    0.0,                  # 0°   arm 0 leidt
-    2 * jnp.pi / 5,      # 72°  arm 1 leidt
-    4 * jnp.pi / 5,      # 144° arm 2 leidt
-    6 * jnp.pi / 5,      # 216° arm 3 leidt
-    8 * jnp.pi / 5,      # 288° arm 4 leidt
+    0.0,  # 0°   arm 0 leidt
+    2 * jnp.pi / 5,  # 72°  arm 1 leidt
+    4 * jnp.pi / 5,  # 144° arm 2 leidt
+    6 * jnp.pi / 5,  # 216° arm 3 leidt
+    8 * jnp.pi / 5,  # 288° arm 4 leidt
 ]
 
 TRAINING_DIRECTIONS = [
     (ControlInput.RIGHT, 0.0),
-    (ControlInput.UP,    jnp.pi / 2),
-    (ControlInput.LEFT,  jnp.pi),
-    (ControlInput.DOWN,  3 * jnp.pi / 2),
+    (ControlInput.UP, jnp.pi / 2),
+    (ControlInput.LEFT, jnp.pi),
+    (ControlInput.DOWN, 3 * jnp.pi / 2),
 ]
 
 CONTROL_INPUT_TO_ANGLE = {
     ControlInput.RIGHT: 0.0,
-    ControlInput.UP:    jnp.pi / 2,
-    ControlInput.LEFT:  jnp.pi,
-    ControlInput.DOWN:  3 * jnp.pi / 2,
+    ControlInput.UP: jnp.pi / 2,
+    ControlInput.LEFT: jnp.pi,
+    ControlInput.DOWN: 3 * jnp.pi / 2,
 }
 
 
@@ -111,7 +111,7 @@ def make_unflatten_fn(template):
 
     def unflatten(flat: jarr) -> dict:
         result = [
-            flat[offset:offset + size].reshape(shape)
+            flat[offset : offset + size].reshape(shape)
             for offset, size, shape in zip(offsets, sizes, shapes)
         ]
         return jax.tree_util.tree_unflatten(treedef, result)
@@ -161,16 +161,15 @@ class NetworkController(Controller):
         cpg = cpg_generator.generate(configuration)
         num_cpg_params = cpg_generator.body_to_jarr(cpg.reset()).size
         self.network = CPGNetwork(num_cpg_params=num_cpg_params)
-        self._template_params = self.network.init(
-            jax.random.PRNGKey(0), jnp.zeros(2)
-        )
+        self._template_params = self.network.init(jax.random.PRNGKey(0), jnp.zeros(2))
 
     def pretrain_from_cpg(
-            self,
-            cpg_params_right: jarr,
-            configuration: Configuration,
-            learning_rate: float = 0.01,
-            steps: int = 1000):
+        self,
+        cpg_params_right: jarr,
+        configuration: Configuration,
+        learning_rate: float = 0.01,
+        steps: int = 1000,
+    ):
         """Pre-trains the network on the 5 natural directions using symmetry.
 
         Uses the known RIGHT solution and rotates it for each of the 5
@@ -206,7 +205,7 @@ class NetworkController(Controller):
             rotated_state = cpg_state.replace(
                 amplitude_goals=cpg_state.amplitude_goals[perm],
                 offset_goals=cpg_state.offset_goals[perm],
-                coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm]
+                coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
             )
             rotated_params = cpg_generator.body_to_jarr(rotated_state)
             training_pairs.append((direction_vector, rotated_params))
@@ -313,6 +312,7 @@ class NetworkController(Controller):
             (population_size, genome_size) to a fitness array of
             shape (population_size,).
         """
+        TRAINING_THETAS = jnp.array([theta for _, theta in TRAINING_DIRECTIONS])
         cpg_generator = configuration.cpg.cpg_generator
         cpg_template = cpg_generator.generate(configuration)
         num_cpg_params = cpg_generator.body_to_jarr(cpg_template.reset()).size
@@ -333,20 +333,10 @@ class NetworkController(Controller):
             env = Environment(configuration)
 
             def _evaluate_genome(flat_weights: jarr, _rng: jarr) -> float:
-                """Evaluates a single genome across all training directions.
-
-                Args:
-                    flat_weights: Flat array of network weights.
-                    _rng: A JAX random key for environment reset.
-
-                Returns:
-                    Total fitness score summed over all directions.
-                """
                 params = unflatten(flat_weights)
-                total_score = 0.0
 
-                for _, theta in TRAINING_DIRECTIONS:
-                    _rng, subkey = jax.random.split(_rng)
+                def eval_direction(theta, rng):
+                    rng, subkey = jax.random.split(rng)
                     env_state = env.reset(subkey)
 
                     cpg = cpg_generator.generate(configuration)
@@ -360,15 +350,6 @@ class NetworkController(Controller):
                     expected_dy = jnp.sin(theta)
 
                     def step_fn(i, val):
-                        """Advances the simulation one step and updates the score.
-
-                        Args:
-                            i: Current step index (unused).
-                            val: Tuple of (cpg_state, env_state, score).
-
-                        Returns:
-                            Updated tuple of (cpg_state, env_state, score).
-                        """
                         cpg_state, env_state, score = val
                         cpg_state = cpg.step(cpg_state)
                         env_state = env.step(
@@ -385,13 +366,20 @@ class NetworkController(Controller):
                     _, _, score = jax.lax.fori_loop(
                         0, 800, step_fn, (cpg_state, env_state, 0.0)
                     )
-                    total_score += score
 
-                return total_score
+                    return score
 
-            new_rngs = jax.random.split(rng, len(arr))
-            scores = jax.vmap(_evaluate_genome)(arr, new_rngs)
-            return scores
+                # split rng per direction
+                rngs = jax.random.split(_rng, TRAINING_THETAS.shape[0])
+
+                # Evaluate over all training directions
+                scores = jax.lax.map(
+                    lambda args: eval_direction(*args), (TRAINING_THETAS, rngs)
+                )
+
+                return jnp.sum(scores)
+
+            return jax.vmap(_evaluate_genome)(arr, jax.random.split(rng, arr.shape[0]))
 
         return evaluator
 

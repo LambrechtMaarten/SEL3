@@ -75,7 +75,7 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
                 optimizer=optax.adam(learning_rate=0.05),
             )
 
-            self.params = self.es.default_params
+            self.params = self.es.default_params.replace(std_init=0.01)
 
             _, subkey = jax.random.split(rng)
             state = self.es.init(subkey, solution, self.params)
