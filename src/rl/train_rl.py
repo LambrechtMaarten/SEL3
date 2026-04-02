@@ -18,8 +18,8 @@ def run_rl_training(configuration):
     env = Environment(configuration)
     cpg_gen = configuration.cpg.cpg_generator
 
-    NUM_EPISODES = 10          # snel testen
-    EPISODE_LENGTH = 200       # aantal stappen per episode
+    NUM_EPISODES = 100          # snel testen
+    EPISODE_LENGTH = 300       # aantal stappen per episode
 
     for episode in range(NUM_EPISODES):
         rng, key_theta, key_env = jax.random.split(rng, 3)
