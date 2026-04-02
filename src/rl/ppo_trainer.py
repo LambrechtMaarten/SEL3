@@ -8,29 +8,46 @@ import flax.linen as nn
 
 from configs.config import Configuration
 from src.environment.environment import Environment
-from src.controller.network_controller import NetworkController
 from src.cpg.cpg_state import CPGState
 from src.jax_extra.jax_extra import jarr
 
 
-@dataclass
-class Transition:
-    direction: jarr
-    state_vec: jarr
-    action: jarr
-    logprob: jarr
-    value: jarr
-    reward: jarr
-    done: jarr
+# ---------- Observaties ----------
+
+def extract_cpg_state_vec(cpg_state: CPGState) -> jarr:
+    # Simpel: gebruik de outputs als state
+    return cpg_state.outputs.ravel()
+
+
+def angle_to_vec(theta: float) -> jarr:
+    return jnp.array([jnp.cos(theta), jnp.sin(theta)])
+
+
+def make_obs(theta: float, cpg_state: CPGState) -> jarr:
+    dir_vec = angle_to_vec(theta)
+    cpg_vec = extract_cpg_state_vec(cpg_state)
+    return jnp.concatenate([dir_vec, cpg_vec], axis=-1)
+
+
+# ---------- Netwerken ----------
+
+class PolicyNetwork(nn.Module):
+    action_dim: int
+
+    @nn.compact
+    def __call__(self, obs: jarr) -> jarr:
+        x = nn.Dense(128)(obs)
+        x = nn.tanh(x)
+        x = nn.Dense(128)(x)
+        x = nn.tanh(x)
+        x = nn.Dense(self.action_dim)(x)
+        return x
 
 
 class ValueNetwork(nn.Module):
-    state_dim: int
-
     @nn.compact
-    def __call__(self, direction_vec: jarr, state_vec: jarr) -> jarr:
-        x = jnp.concatenate([direction_vec, state_vec], axis=-1)
-        x = nn.Dense(128)(x)
+    def __call__(self, obs: jarr) -> jarr:
+        x = nn.Dense(128)(obs)
         x = nn.tanh(x)
         x = nn.Dense(128)(x)
         x = nn.tanh(x)
@@ -38,13 +55,17 @@ class ValueNetwork(nn.Module):
         return x[..., 0]
 
 
-def extract_state_from_cpg(cpg_state: CPGState) -> jarr:
-    return cpg_state.outputs.ravel()
+@dataclass
+class Transition:
+    obs: jarr
+    action: jarr
+    logprob: jarr
+    value: jarr
+    reward: jarr
+    done: jarr
 
 
-def angle_to_vector(theta: float) -> jarr:
-    return jnp.array([jnp.cos(theta), jnp.sin(theta)])
-
+# ---------- PPO helpers ----------
 
 def gaussian_logprob(mean: jarr, log_std: jarr, action: jarr) -> jarr:
     std = jnp.exp(log_std)
@@ -67,12 +88,14 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
     return advantages, returns
 
 
+# ---------- Rollout ----------
+
 def rollout_batch(
     rng: jarr,
     configuration: Configuration,
-    controller: NetworkController,
-    controller_params: Dict[str, Any],
+    policy_params: Dict[str, Any],
     value_params: Dict[str, Any],
+    policy_net: PolicyNetwork,
     value_net: ValueNetwork,
     num_episodes: int,
     episode_length: int,
@@ -86,7 +109,6 @@ def rollout_batch(
     for _ in range(num_episodes):
         rng, key_theta, key_env = jax.random.split(rng, 3)
         theta = jax.random.uniform(key_theta, (), minval=0.0, maxval=2 * jnp.pi)
-        direction_vec = angle_to_vector(theta)
 
         env_state = env.reset(key_env)
         cpg = cpg_gen.generate(configuration)
@@ -96,17 +118,15 @@ def rollout_batch(
         start_y = env_state.observations["disk_position"][1]
 
         for _ in range(episode_length):
-            state_vec = extract_state_from_cpg(cpg_state)
+            obs = make_obs(theta, cpg_state)
 
-            mean_action = controller.policy_apply(
-                controller_params, float(theta), cpg_state
-            )
-
+            mean_action = policy_net.apply(policy_params, obs)
             rng, key_action = jax.random.split(rng)
             std = jnp.exp(log_std)
             action = mean_action + std * jax.random.normal(key_action, mean_action.shape)
             logprob = gaussian_logprob(mean_action, log_std, action)
 
+            # CPG + env
             cpg_state = cpg_gen.modulate_body(cpg_state, action)
             cpg_state = cpg.step(cpg_state)
             actions_env = cpg_gen.outputs_to_actions(cpg_state.outputs, configuration)
@@ -116,12 +136,11 @@ def rollout_batch(
             dy = env_state.observations["disk_position"][1] - start_y
             reward = dx * jnp.cos(theta) + dy * jnp.sin(theta)
 
-            value = value_net.apply(value_params, direction_vec, state_vec)
+            value = value_net.apply(value_params, obs)
 
             transitions.append(
                 Transition(
-                    direction=direction_vec,
-                    state_vec=state_vec,
+                    obs=obs,
                     action=action,
                     logprob=logprob,
                     value=value,
@@ -131,8 +150,7 @@ def rollout_batch(
             )
 
     batch = {
-        "direction": jnp.stack([t.direction for t in transitions]),
-        "state_vec": jnp.stack([t.state_vec for t in transitions]),
+        "obs": jnp.stack([t.obs for t in transitions]),
         "action": jnp.stack([t.action for t in transitions]),
         "logprob": jnp.stack([t.logprob for t in transitions]),
         "value": jnp.stack([t.value for t in transitions]),
@@ -143,40 +161,37 @@ def rollout_batch(
     return rng, batch
 
 
+# ---------- PPO training ----------
+
 def run_ppo_training(configuration: Configuration):
     logger = configuration.logger
     logger.init_logger()
-    controller: NetworkController = configuration.controller.controller
 
     rng = jax.random.PRNGKey(0)
 
-    # Policy params
-    rng, key_policy = jax.random.split(rng)
-    controller_params = controller.init_params(configuration, key_policy)
-
-    # Value net init
+    # Init CPG om dimensies te kennen
     cpg_gen = configuration.cpg.cpg_generator
     cpg = cpg_gen.generate(configuration)
     cpg_state = cpg.reset()
-    state_dim = extract_state_from_cpg(cpg_state).size
-    value_net = ValueNetwork(state_dim=state_dim)
-    rng, key_value = jax.random.split(rng)
-    value_params = value_net.init(
-        key_value, angle_to_vector(0.0), jnp.zeros(state_dim)
-    )
+    dummy_obs = make_obs(0.0, cpg_state)
+    obs_dim = dummy_obs.size
+    action_dim = cpg_state.outputs.ravel().size
 
-    # Optimizers
+    policy_net = PolicyNetwork(action_dim=action_dim)
+    value_net = ValueNetwork()
+
+    rng, key_policy, key_value = jax.random.split(rng, 3)
+    policy_params = policy_net.init(key_policy, dummy_obs)
+    value_params = value_net.init(key_value, dummy_obs)
+
     policy_opt = optax.adam(3e-4)
     value_opt = optax.adam(1e-3)
-    policy_opt_state = policy_opt.init(controller_params)
+    policy_opt_state = policy_opt.init(policy_params)
     value_opt_state = value_opt.init(value_params)
 
-    # Fixed log_std
-    log_std = jnp.zeros_like(
-        controller.policy_apply(controller_params, 0.0, cpg_state)
-    )
+    log_std = jnp.zeros(action_dim)
 
-    NUM_UPDATES = 20
+    NUM_UPDATES = 50
     EPISODES_PER_UPDATE = 8
     EPISODE_LENGTH = 200
     PPO_EPOCHS = 4
@@ -188,9 +203,9 @@ def run_ppo_training(configuration: Configuration):
         rng, batch = rollout_batch(
             rng,
             configuration,
-            controller,
-            controller_params,
+            policy_params,
             value_params,
+            policy_net,
             value_net,
             EPISODES_PER_UPDATE,
             EPISODE_LENGTH,
@@ -210,12 +225,7 @@ def run_ppo_training(configuration: Configuration):
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         def policy_loss_fn(params, log_std, batch, advantages, old_logprob):
-            # Hier gebruiken we alleen state_vec + direction uit batch
-            mean = controller.policy_apply(
-                params,
-                0.0,  # theta zit impliciet in direction_vec; voor nu laten we dit zo
-                cpg_state,  # in een nettere versie zou je hier echte obs meegeven
-            )
+            mean = policy_net.apply(params, batch["obs"])
             logprob = gaussian_logprob(mean, log_std, batch["action"])
             ratio = jnp.exp(logprob - old_logprob)
             unclipped = ratio * advantages
@@ -224,21 +234,19 @@ def run_ppo_training(configuration: Configuration):
             return loss
 
         def value_loss_fn(params, batch, returns):
-            preds = value_net.apply(
-                params, batch["direction"], batch["state_vec"]
-            )
+            preds = value_net.apply(params, batch["obs"])
             return jnp.mean((preds - returns) ** 2)
 
         old_logprob = batch["logprob"]
 
         for _ in range(PPO_EPOCHS):
             policy_loss, policy_grads = jax.value_and_grad(policy_loss_fn)(
-                controller_params, log_std, batch, advantages, old_logprob
+                policy_params, log_std, batch, advantages, old_logprob
             )
             updates, policy_opt_state = policy_opt.update(
                 policy_grads, policy_opt_state
             )
-            controller_params = optax.apply_updates(controller_params, updates)
+            policy_params = optax.apply_updates(policy_params, updates)
 
             value_loss, value_grads = jax.value_and_grad(value_loss_fn)(
                 value_params, batch, returns
@@ -248,7 +256,6 @@ def run_ppo_training(configuration: Configuration):
             )
             value_params = optax.apply_updates(value_params, v_updates)
 
-        # Gemiddelde return per episode
         ep_returns = rewards.reshape(EPISODES_PER_UPDATE, EPISODE_LENGTH).sum(axis=1)
         avg_return = float(jnp.mean(ep_returns))
 
@@ -261,7 +268,4 @@ def run_ppo_training(configuration: Configuration):
             }
         )
 
-    # Optioneel: policy opslaan in controller.weights
-    controller.weights = jnp.array(
-        [float(x) for x in controller.flatten_params(controller_params)]
-    )
+    # Hier kun je policy_params eventueel opslaan als je dat wilt
