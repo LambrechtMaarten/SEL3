@@ -68,8 +68,10 @@ if __name__ == "__main__":
             cpg_params_right, configuration, learning_rate=0.01, steps=1000
         )
 
-        # Fase 2: genetische optimalisatie voor interpolatie
-        train_controller(configuration)
+        # Fase 2: RL-training
+        from src.rl.train_rl import run_rl_training
+        run_rl_training(configuration)
+
 
     elif sys.argv[1] == "simulate":
         simulate_controller(sys.argv[2])
