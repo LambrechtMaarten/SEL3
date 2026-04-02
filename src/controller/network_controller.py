@@ -1,3 +1,5 @@
+from pathlib import Path
+from typing import Callable
 from typing import Optional
 
 import flax.linen as nn
@@ -11,7 +13,6 @@ from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState
 from src.jax_extra.jax_extra import jarr
-from pathlib import Path
 
 # Vijf natuurlijke richtingen (symmetrie van de brittle star)
 NATURAL_DIRECTIONS = [
@@ -25,9 +26,9 @@ NATURAL_DIRECTIONS = [
 # Voor manuele besturing via ControlInput (bijv. keyboard / UI)
 CONTROL_INPUT_TO_ANGLE = {
     ControlInput.RIGHT: 0.0,
-    ControlInput.UP:    jnp.pi / 2,
-    ControlInput.LEFT:  jnp.pi,
-    ControlInput.DOWN:  3 * jnp.pi / 2,
+    ControlInput.UP: jnp.pi / 2,
+    ControlInput.LEFT: jnp.pi,
+    ControlInput.DOWN: 3 * jnp.pi / 2,
 }
 
 
@@ -51,7 +52,7 @@ def make_unflatten_fn(template):
 
     def unflatten(flat: jarr) -> dict:
         result = [
-            flat[offset:offset + size].reshape(shape)
+            flat[offset : offset + size].reshape(shape)
             for offset, size, shape in zip(offsets, sizes, shapes)
         ]
         return jax.tree_util.tree_unflatten(treedef, result)
@@ -228,6 +229,7 @@ class NetworkController(Controller):
                 amplitude_goals=cpg_state.amplitude_goals[perm],
                 offset_goals=cpg_state.offset_goals[perm],
                 coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
+                coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
             )
             rotated_params = cpg_generator.body_to_jarr(rotated_state)
 
@@ -346,3 +348,4 @@ class NetworkController(Controller):
         with open(path, "r") as f:
             values = f.read().split()
             self.weights = jnp.array([float(x) for x in values if x])
+

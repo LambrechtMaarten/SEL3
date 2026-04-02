@@ -2,7 +2,8 @@ from typing import Any, Tuple
 
 import jax
 import jax.numpy as jnp
-from evosax.algorithms import PGPE as ES
+import optax
+from evosax.algorithms import SNES as ES
 
 from src.genetic_optimization.genetic_optimization import GeneticOptimizer
 from src.jax_extra.jax_extra import jarr
@@ -68,10 +69,13 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
             # het gemiddelde van een normale verdeling ≈ 0.
             solution = jnp.mean(population, axis=0)
 
-            self.es = ES(population_size, solution)
-            self.params = self.es.default_params.replace(
-                std_init=0.1, std_lr=0.05, std_max_change=0.2
+            self.es = ES(
+                population_size=population_size,
+                solution=solution,
+                optimizer=optax.adam(learning_rate=0.05),
             )
+
+            self.params = self.es.default_params.replace(std_init=0.01)
 
             _, subkey = jax.random.split(rng)
             state = self.es.init(subkey, solution, self.params)

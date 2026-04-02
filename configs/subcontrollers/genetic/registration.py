@@ -35,7 +35,7 @@ def register():
 
     SubConfigurationMap.add_configuration(
         GeneticConfiguration,
-        GeneticConfiguration("long", 100, 20, RandomNormalGeneticOptimizer()),
+        GeneticConfiguration("long", 100, 10, RandomNormalGeneticOptimizer()),
     )
 
     SubConfigurationMap.add_configuration(
