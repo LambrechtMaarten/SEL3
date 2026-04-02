@@ -347,3 +347,9 @@ class NetworkController(Controller):
             values = f.read().split()
             self.weights = jnp.array([float(x) for x in values if x])
 
+    def evaluator(self, *args, **kwargs):
+        raise NotImplementedError("Evaluator is removed; use RL training instead.")
+
+    def train_controller(self, *args, **kwargs):
+        raise NotImplementedError("Genetic training is removed; use RL training instead.")
+
