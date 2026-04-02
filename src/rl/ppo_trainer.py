@@ -145,6 +145,7 @@ def rollout_batch(
 
 def run_ppo_training(configuration: Configuration):
     logger = configuration.logger
+    logger.init_logger()
     controller: NetworkController = configuration.controller.controller
 
     rng = jax.random.PRNGKey(0)
