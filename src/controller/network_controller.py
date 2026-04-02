@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 import flax.linen as nn
+import flax.serialization
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -15,11 +16,11 @@ from src.jax_extra.jax_extra import jarr
 
 # Vijf natuurlijke richtingen (symmetrie van de brittle star)
 NATURAL_DIRECTIONS = [
-    0.0,                 # 0°   arm 0 leidt
-    2 * jnp.pi / 5,      # 72°  arm 1 leidt
-    4 * jnp.pi / 5,      # 144° arm 2 leidt
-    6 * jnp.pi / 5,      # 216° arm 3 leidt
-    8 * jnp.pi / 5,      # 288° arm 4 leidt
+    0.0,  # 0°   arm 0 leidt
+    2 * jnp.pi / 5,  # 72°  arm 1 leidt
+    4 * jnp.pi / 5,  # 144° arm 2 leidt
+    6 * jnp.pi / 5,  # 216° arm 3 leidt
+    8 * jnp.pi / 5,  # 288° arm 4 leidt
 ]
 
 # Voor manuele besturing via ControlInput (bijv. keyboard / UI)
@@ -296,19 +297,16 @@ class NetworkController(Controller):
                 ),
             )
 
-        if self.weights is None:
+        if self.params is None:
             raise RuntimeError(
-                "NetworkController.act werd aangeroepen zonder geladen/ingestelde weights. "
-                "Gebruik pretrain_from_cpg() of laad RL-getrainde params en zet self.weights."
+                "NetworkController.act werd aangeroepen zonder geladen/ingestelde params."
             )
 
         theta = CONTROL_INPUT_TO_ANGLE.get(control_input, 0.0)
         direction_vector = angle_to_vector(theta)
         state_vec = extract_state_from_cpg(cpg_state)
 
-        unflatten = make_unflatten_fn(self._template_params)
-        params = unflatten(self.weights)
-        cpg_params = self.network.apply(params, direction_vector, state_vec)
+        cpg_params = self.network.apply(self.params, direction_vector, state_vec)
         return cpg_generator.modulate_body(cpg_state, cpg_params)
 
     # ---------- Nutsfuncties ----------
@@ -338,18 +336,15 @@ class NetworkController(Controller):
             f.write(" ".join([f"{x:.8f}" for x in flat.ravel()]))
 
     def read_controller(self, path: str):
-        """Laadt eerder opgeslagen flatten-weights in self.weights.
+        with open(path, "rb") as f:
+            bytes_data = f.read()
 
-        Dit is vooral handig voor manuele besturing of om een RL-policy
-        te hergebruiken zonder opnieuw te trainen.
-        """
-        with open(path, "r") as f:
-            values = f.read().split()
-            self.weights = jnp.array([float(x) for x in values if x])
+        self.params = flax.serialization.from_bytes(self._template_params, bytes_data)
 
     def evaluator(self, *args, **kwargs):
         raise NotImplementedError("Evaluator is removed; use RL training instead.")
 
     def train_controller(self, *args, **kwargs):
-        raise NotImplementedError("Genetic training is removed; use RL training instead.")
-
+        raise NotImplementedError(
+            "Genetic training is removed; use RL training instead."
+        )

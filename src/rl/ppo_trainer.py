@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import flax.linen as nn
+import flax.serialization
 import jax
 import jax.numpy as jnp
 import optax
@@ -9,6 +11,9 @@ from configs.config import Configuration
 from src.cpg.cpg_state import CPGState
 from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
+
+GAMMA = 0.99
+LAMBDA = 0.95
 
 # ---------- Observaties ----------
 
@@ -77,7 +82,7 @@ def gaussian_logprob(mean: jarr, log_std: jarr, action: jarr) -> jarr:
     )
 
 
-def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
+def compute_gae(rewards, values, dones):
     """
     rewards: [T]
     values: [T+1]
@@ -87,8 +92,8 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
     def gae_step(carry, inputs):
         gae_next = carry
         reward, value, value_next, done = inputs
-        delta = reward + gamma * value_next * (1.0 - done) - value
-        gae = delta + gamma * lam * (1.0 - done) * gae_next
+        delta = reward + GAMMA * value_next * (1.0 - done) - value
+        gae = delta + GAMMA * LAMBDA * (1.0 - done) * gae_next
         return gae, gae
 
     inputs = (rewards, values[:-1], values[1:], dones)
@@ -230,12 +235,21 @@ def run_ppo_training(configuration: Configuration):
 
     NUM_UPDATES = 50
     EPISODES_PER_UPDATE = 8
-    EPISODE_LENGTH = 200
+    EPISODE_LENGTH = 400
     PPO_EPOCHS = 4
     CLIP_EPS = 0.2
-    GAMMA = 0.99
-    LAMBDA = 0.95
-    import time
+
+    # Log info to wandb, some of it is useful for debugging,
+    # some just for looking for certain runs
+    logger.log(
+        {
+            "info/num_updates": NUM_UPDATES,
+            "info/episodes_per_update": EPISODES_PER_UPDATE,
+            "info/episode_length": EPISODE_LENGTH,
+            "info/ppo_epochs": PPO_EPOCHS,
+            "info/clip_eps": CLIP_EPS,
+        }
+    )
 
     def make_rollout_fn(configuration, policy_net, value_net):
         def rollout_fn(rng, policy_params, value_params, log_std):
@@ -254,17 +268,11 @@ def run_ppo_training(configuration: Configuration):
         return jax.jit(rollout_fn)
 
     rollout_fn = make_rollout_fn(configuration, policy_net, value_net)
+    compute_gae_jit = jax.jit(compute_gae)
 
     for update in range(NUM_UPDATES):
         print(f"Update {update + 1}/{NUM_UPDATES}")
-        before = len(jax.lib.xla_bridge.get_backend().live_executables())
-
-        start = time.time()
-
         rng, batch = rollout_fn(rng, policy_params, value_params, log_std)
-        after = len(jax.lib.xla_bridge.get_backend().live_executables())
-        print("new executables:", after - before)
-        print(f"Rollout tijd: {time.time() - start:.2f} seconden")
 
         rewards = batch["reward"]
         values = batch["value"]
@@ -272,13 +280,8 @@ def run_ppo_training(configuration: Configuration):
 
         last_value = values[-1]
         values_ext = jnp.concatenate([values, last_value[None]], axis=0)
-        start = time.time()
-        advantages, returns = compute_gae(
-            rewards, values_ext, dones, gamma=GAMMA, lam=LAMBDA
-        )
+        advantages, returns = compute_gae_jit(rewards, values_ext, dones)
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-
-        print(f"GAE berekening tijd: {time.time() - start:.2f} seconden")
 
         def policy_loss_fn(params, log_std, batch, advantages, old_logprob):
             mean = policy_net.apply(params, batch["obs"])
@@ -295,8 +298,6 @@ def run_ppo_training(configuration: Configuration):
 
         old_logprob = batch["logprob"]
 
-        start = time.time()
-
         for _ in range(PPO_EPOCHS):
             policy_loss, policy_grads = jax.value_and_grad(policy_loss_fn)(
                 policy_params, log_std, batch, advantages, old_logprob
@@ -311,17 +312,26 @@ def run_ppo_training(configuration: Configuration):
             )
             v_updates, value_opt_state = value_opt.update(value_grads, value_opt_state)
             value_params = optax.apply_updates(value_params, v_updates)
-        print(f"PPO update tijd: {time.time() - start:.2f} seconden")
         ep_returns = rewards.reshape(EPISODES_PER_UPDATE, EPISODE_LENGTH).sum(axis=1)
         avg_return = float(jnp.mean(ep_returns))
 
         logger.log(
             {
-                "update": update,
-                "avg_episode_return": avg_return,
-                "policy_loss": float(policy_loss),
-                "value_loss": float(value_loss),
+                "eval/avg_episode_return": avg_return,
+                "eval/policy_loss": float(policy_loss),
+                "eval/value_loss": float(value_loss),
+                "eval/max_episode_return": float(jnp.max(ep_returns)),
+                "eval/min_episode_return": float(jnp.min(ep_returns)),
+                "eval/update": update,
             }
         )
 
     # Hier kun je policy_params eventueel opslaan als je dat wilt
+    save_path = Path(logger.base_folder) / "controller"
+
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(save_path, "wb") as f:
+        f.write(flax.serialization.to_bytes(policy_params))
+
+    print(f"Policy opgeslagen naar {save_path}")

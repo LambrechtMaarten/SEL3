@@ -58,7 +58,7 @@ def simulate_controller(output_path: str):
         }.get(key, ControlInput.ZZZ)
 
         cpg_state = configuration.controller.controller.act(
-            cpg_state, control_input, configuration, env_state
+            cpg_state, control_input, configuration
         )
         cpg_state = cpg.step(cpg_state)
         actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
