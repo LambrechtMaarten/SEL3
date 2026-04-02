@@ -3,21 +3,3 @@ Starting venv
 Starting main.py
 Failed to import warp: No module named 'warp'
 Failed to import mujoco_warp: No module named 'warp'
-Richting 0 (0.0°): params klaar
-Richting 1 (72.0°): params klaar
-Richting 2 (144.0°): params klaar
-Richting 3 (216.0°): params klaar
-Richting 4 (288.0°): params klaar
-Start pre-training op 5 natuurlijke richtingen...
-  Stap 0/1000: loss = 15.894503
-  Stap 100/1000: loss = 0.000412
-  Stap 200/1000: loss = 0.000000
-  Stap 300/1000: loss = 0.000000
-  Stap 400/1000: loss = 0.000000
-  Stap 500/1000: loss = 0.000000
-  Stap 600/1000: loss = 0.000000
-  Stap 700/1000: loss = 0.000000
-  Stap 800/1000: loss = 0.000000
-  Stap 900/1000: loss = 0.000000
-Pre-training voltooid!
-Warm start: populatie geïnitialiseerd rond pre-getrainde gewichten

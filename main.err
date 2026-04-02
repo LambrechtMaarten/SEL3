@@ -1,12 +1,13 @@
 /kyukon/data/gent/451/vsc45194/venvs/sel3_joltik/lib/python3.11/site-packages/glfw/__init__.py:917: GLFWError: (65550) b'X11: The DISPLAY environment variable is missing'
   warnings.warn(message, GLFWError)
-wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /user/gent/451/vsc45194/.netrc.
-wandb: Currently logged in as: jasmaert-maerten (jasmaert-maerten-ghent-university) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
-wandb: setting up run 0oogejmk
-wandb: Tracking run with wandb version 0.25.1
-wandb: Run data is saved locally in output/2026_04_02-12.22.04/wandb/run-20260402_122223-0oogejmk
-wandb: Run `wandb offline` to turn off syncing.
-wandb: Syncing run wandb
-wandb: ⭐️ View project at https://wandb.ai/jasmaert-maerten-ghent-university/brittle-star-training
-wandb: 🚀 View run at https://wandb.ai/jasmaert-maerten-ghent-university/brittle-star-training/runs/0oogejmk
-slurmstepd: error: *** JOB 40813352 ON node3302.joltik.os CANCELLED AT 2026-04-02T12:22:52 ***
+Traceback (most recent call last):
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/src/main.py", line 14, in <module>
+    from configs.subcontrollers.register import register
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/configs/subcontrollers/register.py", line 1, in <module>
+    import configs.subcontrollers.controller.registration as controller
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/configs/subcontrollers/controller/registration.py", line 5, in <module>
+    from src.controller.network_controller import NetworkController
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/src/controller/network_controller.py", line 231
+    coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: keyword argument repeated: coupled_phase_biases
