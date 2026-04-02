@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Callable
 from typing import Optional
 
 import flax.linen as nn
