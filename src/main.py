@@ -61,16 +61,16 @@ if __name__ == "__main__":
             cpg_params_right = jnp.array(
                 [float(x) for x in arrays.replace("[", " ").replace("]", " ").split()]
             )
-
-        # Fase 1: pre-train op 5 natuurlijke richtingen
+            
+        # Fase 1: pre-train
         network_controller: NetworkController = configuration.controller.controller
         network_controller.pretrain_from_cpg(
             cpg_params_right, configuration, learning_rate=0.01, steps=1000
         )
 
-        # Fase 2: RL-training
-        from src.rl.train_rl import run_rl_training
-        run_rl_training(configuration)
+        # Fase 2: PPO-training
+        from src.rl.ppo_trainer import run_ppo_training
+        run_ppo_training(configuration)
 
 
     elif sys.argv[1] == "simulate":
