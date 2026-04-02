@@ -1,0 +1,12 @@
+/kyukon/data/gent/451/vsc45194/venvs/sel3_joltik/lib/python3.11/site-packages/glfw/__init__.py:917: GLFWError: (65550) b'X11: The DISPLAY environment variable is missing'
+  warnings.warn(message, GLFWError)
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /user/gent/451/vsc45194/.netrc.
+wandb: Currently logged in as: jasmaert-maerten (jasmaert-maerten-ghent-university) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 0oogejmk
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in output/2026_04_02-12.22.04/wandb/run-20260402_122223-0oogejmk
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run wandb
+wandb: ⭐️ View project at https://wandb.ai/jasmaert-maerten-ghent-university/brittle-star-training
+wandb: 🚀 View run at https://wandb.ai/jasmaert-maerten-ghent-university/brittle-star-training/runs/0oogejmk
+slurmstepd: error: *** JOB 40813352 ON node3302.joltik.os CANCELLED AT 2026-04-02T12:22:52 ***

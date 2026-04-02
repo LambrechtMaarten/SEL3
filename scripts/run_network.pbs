@@ -2,7 +2,6 @@
 #PBS -l gpus=1
 #PBS -l walltime=00:20:00
 #PBS -m abe
-#PBS -M maalambr.lambrecht@ugent.be
 #PBS -o main.out 
 #PBS -e main.err
 
@@ -25,4 +24,4 @@ echo "Starting main.py"
 
 export HEADLESS=True
 
-PYTHONPATH=. python -u src/main.py train_network output/2026_03_26-15.39.36/controller
+PYTHONPATH=. python -u src/main.py train_network scripts/controller

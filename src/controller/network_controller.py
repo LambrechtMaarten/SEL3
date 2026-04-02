@@ -228,7 +228,6 @@ class NetworkController(Controller):
                 amplitude_goals=cpg_state.amplitude_goals[perm],
                 offset_goals=cpg_state.offset_goals[perm],
                 coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
-                coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
             )
             rotated_params = cpg_generator.body_to_jarr(rotated_state)
 
