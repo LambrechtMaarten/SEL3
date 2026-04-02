@@ -4,13 +4,17 @@ import jax.numpy as jnp
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
+from configs.subcontrollers.controller.controller_configurations import (
+    ControllerConfiguration,
+)
 from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
 from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
 from configs.subcontrollers.logger.logger import Logger
 from configs.subcontrollers.random.random_configurations import RandomConfiguration
 from configs.subcontrollers.register import register
-from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
+from configs.subcontrollers.simulation.simulation_configurations import (
+    SimulationConfiguration,
+)
 from src.controller.network_controller import NetworkController
 from src.render.render_video import render_saved_controller
 from src.simulation.simulate_controller import simulate_controller
@@ -20,7 +24,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(
             'you need to say "train", "train_network", "simulate" or "render" '
-            'as the first arg or it doesn\'t know what to do'
+            "as the first arg or it doesn't know what to do"
         )
 
     register()
@@ -61,14 +65,13 @@ if __name__ == "__main__":
         # Fase 1: pre-train op 5 natuurlijke richtingen
         network_controller: NetworkController = configuration.controller.controller
         network_controller.pretrain_from_cpg(
-            cpg_params_right,
-            configuration,
-            learning_rate=0.01,
-            steps=1000
+            cpg_params_right, configuration, learning_rate=0.01, steps=1000
         )
 
-        # Fase 2: genetische optimalisatie voor interpolatie
-        train_controller(configuration)
+        # Fase 2: RL-training
+        from src.rl.train_rl import run_rl_training
+        run_rl_training(configuration)
+
 
     elif sys.argv[1] == "simulate":
         simulate_controller(sys.argv[2])

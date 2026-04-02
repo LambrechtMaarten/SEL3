@@ -1,12 +1,13 @@
+import math
 from enum import Enum
 
 
 class ControlInput(Enum):
-    UP = "up"
+    UP = math.pi / 2
     ZZZ = "wait"
-    DOWN = "down"
-    LEFT = "left"
-    RIGHT = "right"
+    DOWN = math.pi / -2
+    LEFT = -math.pi
+    RIGHT = 0
     UPLEFT = "upleft"
     UPRIGHT = "upright"
     DOWNLEFT = "downleft"
