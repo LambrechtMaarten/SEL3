@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 #PBS -l nodes=1:ppn=1
 #PBS -l gpus=1
 #PBS -l walltime=02:20:00
@@ -32,38 +31,3 @@ ls $CUDA_HOME/lib64 | grep cusparse
 echo "Starting main.py"
 
 PYTHONPATH=. python -u src/main.py train
-=======
-#PBS -l nodes=1:ppn=1
-#PBS -l gpus=1
-#PBS -l walltime=02:20:00
-#PBS -m abe
-#PBS -o main.out 
-#PBS -e main.err
-
-# Assumes program is queued like this: "qsub srcipts/run_main.pbs"
-cd $PBS_O_WORKDIR
-
-
-echo "Loading modules"
-ml load GCCcore/12.3.0 
-ml load Python/3.11.3-GCCcore-12.3.0 
-ml load FFmpeg/6.0-GCCcore-12.3.0
-module load CUDA/12.1.1
-module load cuDNN/8.9.2.26-CUDA-12.1.1
-
-export HEADLESS=True
-
-# Venv for the cluster running this script on should have already been made
-# For each cluster a separate venv needs to be created, see env_script.sh
-echo "Starting venv"
-source venv/sel3_${VSC_INSTITUTE_CLUSTER}/bin/activate
-
-hostname
-module list
-echo $CUDA_HOME
-ls $CUDA_HOME/lib64 | grep cusparse
-
-echo "Starting main.py"
-
-PYTHONPATH=. python -u src/main.py train
->>>>>>> 440606ec32e8d41a4f35bd5ab6024c8178c753bd
