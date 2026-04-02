@@ -1,21 +1,25 @@
+import os
 import sys
 
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
 import imageio
-import os
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.manifold import TSNE
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
+from configs.subcontrollers.controller.controller_configurations import (
+    ControllerConfiguration,
+)
 from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
 from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
 from configs.subcontrollers.logger.logger import Logger
 from configs.subcontrollers.random.random_configurations import RandomConfiguration
 from configs.subcontrollers.register import register
-from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
+from configs.subcontrollers.simulation.simulation_configurations import (
+    SimulationConfiguration,
+)
 
 
 def tst(path: str):
@@ -27,11 +31,21 @@ def tst(path: str):
         configuration_json = f.read()
     configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "silent_logger"),
-        SubConfigurationMap.get_configuration_from_json(configuration_json, SimulationConfiguration),
-        SubConfigurationMap.get_configuration_from_json(configuration_json, CPGConfiguration),
-        SubConfigurationMap.get_configuration_from_json(configuration_json, RandomConfiguration),
-        SubConfigurationMap.get_configuration_from_json(configuration_json, GeneticConfiguration),
-        SubConfigurationMap.get_configuration_from_json(configuration_json, ControllerConfiguration)
+        SubConfigurationMap.get_configuration_from_json(
+            configuration_json, SimulationConfiguration
+        ),
+        SubConfigurationMap.get_configuration_from_json(
+            configuration_json, CPGConfiguration
+        ),
+        SubConfigurationMap.get_configuration_from_json(
+            configuration_json, RandomConfiguration
+        ),
+        SubConfigurationMap.get_configuration_from_json(
+            configuration_json, GeneticConfiguration
+        ),
+        SubConfigurationMap.get_configuration_from_json(
+            configuration_json, ControllerConfiguration
+        ),
     )
     genome_size = configuration.controller.controller.genome_size(configuration)
     population_size = configuration.genetic.population_size
@@ -51,8 +65,12 @@ def tst(path: str):
             selections.append(values[i])
             i += 1
 
-    populations = jnp.array(populations).reshape(generations, population_size, genome_size)
-    selections = jnp.array(selections).reshape(generations, population_size // 2, genome_size)
+    populations = jnp.array(populations).reshape(
+        generations, population_size, genome_size
+    )
+    selections = jnp.array(selections).reshape(
+        generations, population_size // 2, genome_size
+    )
     evaluations = jnp.array(evaluations).reshape(generations, population_size)
 
     all_genomes = jnp.vstack(populations)
@@ -62,7 +80,7 @@ def tst(path: str):
         perplexity=100,
         random_state=42,
         init="pca",
-        learning_rate="auto"
+        learning_rate="auto",
     ).fit_transform(all_genomes)
 
     embeddings_per_gen = []
@@ -102,11 +120,18 @@ def tst(path: str):
         plt.gca().get_xaxis().set_visible(False)
         plt.gca().get_yaxis().set_visible(False)
 
-        plt.scatter(pop_points[:, 0], pop_points[:, 1],
-                    c="blue", s=40, label="Population")
+        plt.scatter(
+            pop_points[:, 0], pop_points[:, 1], c="blue", s=40, label="Population"
+        )
 
-        plt.scatter(sel_points[:, 0], sel_points[:, 1],
-                    c="yellow", edgecolors="black", s=70, label="Selected")
+        plt.scatter(
+            sel_points[:, 0],
+            sel_points[:, 1],
+            c="yellow",
+            edgecolors="black",
+            s=70,
+            label="Selected",
+        )
 
         plt.title(f"Generation {gen}")
         plt.legend()
@@ -124,6 +149,6 @@ def tst(path: str):
     print("GIF saved to:", gif_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if sys.argv[1] == "test":
         tst(sys.argv[2])

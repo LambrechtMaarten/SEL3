@@ -40,10 +40,14 @@ class OneDirectionController(Controller):
 
         rotation = env_state.observations["disk_rotation"][2]
         wanted_direction = control_input.value
-        rotated_direction = ((wanted_direction - rotation) % (2*math.pi) + (2*math.pi)) % (2*math.pi)
-        index = int(rotated_direction/(2*math.pi)*5)
+        rotated_direction = (
+            (wanted_direction - rotation) % (2 * math.pi) + (2 * math.pi)
+        ) % (2 * math.pi)
+        index = int(rotated_direction / (2 * math.pi) * 5)
         print(rotation, wanted_direction, rotated_direction, index)
-        return cpg_generator.modulate_symmetric_rotation(cpg_generator.modulate_body(cpg_state, self.body_cpg), index)
+        return cpg_generator.modulate_symmetric_rotation(
+            cpg_generator.modulate_body(cpg_state, self.body_cpg), index
+        )
 
     def train_controller(
         self,

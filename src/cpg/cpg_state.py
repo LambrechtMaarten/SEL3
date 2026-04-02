@@ -38,7 +38,7 @@ class CPGState:
             d_offsets=jnp.zeros(num_oscilators),
             amplitude_goals=jnp.zeros(num_oscilators),
             offset_goals=jnp.zeros(num_oscilators),
-            coupled_phase_biases=jnp.zeros(phase_biases_shape)
+            coupled_phase_biases=jnp.zeros(phase_biases_shape),
         )
 
     def modulate_random(self, rng):
@@ -47,13 +47,21 @@ class CPGState:
         offset_goals = jax.random.normal(rb, self.offset_goals.shape)
         coupled_phase_biases = jax.random.normal(rc, self.coupled_phase_biases.shape)
         frequency = jnp.pi
-        return self.modulate(amplitude_goals, offset_goals, coupled_phase_biases, frequency)
+        return self.modulate(
+            amplitude_goals, offset_goals, coupled_phase_biases, frequency
+        )
 
-    def modulate(self, amplitude_goals: jarr, offset_goals: jarr, coupled_phase_biases: jarr, frequency: float):
+    def modulate(
+        self,
+        amplitude_goals: jarr,
+        offset_goals: jarr,
+        coupled_phase_biases: jarr,
+        frequency: float,
+    ):
         # noinspection PyUnresolvedReferences
         return self.replace(
             amplitude_goals=amplitude_goals,
             offset_goals=offset_goals,
             coupled_phase_biases=coupled_phase_biases,
-            frequency=frequency
+            frequency=frequency,
         )

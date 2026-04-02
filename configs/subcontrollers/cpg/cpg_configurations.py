@@ -8,9 +8,6 @@ class CPGConfiguration(SubConfiguration):
     It determines among other things how many oscilators there are per arm and how these map to actuators.
     """
 
-    def __init__(
-            self,
-            name: str,
-            cpg_generator: CPGGenerator):
+    def __init__(self, name: str, cpg_generator: CPGGenerator):
         super().__init__(name)
         self.cpg_generator: CPGGenerator = cpg_generator

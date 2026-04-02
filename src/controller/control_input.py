@@ -3,9 +3,9 @@ from enum import Enum
 
 
 class ControlInput(Enum):
-    UP = math.pi/4
+    UP = math.pi / 4
     ZZZ = "wait"
-    DOWN = math.pi/-2
+    DOWN = math.pi / -2
     LEFT = -math.pi
     RIGHT = 0
     UPLEFT = "upleft"
