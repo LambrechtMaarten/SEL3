@@ -1,11 +1,13 @@
 import jax
 import jax.numpy as jnp
+import wandb
 
 from src.environment.environment import Environment
 from src.controller.network_controller import NetworkController
 
 def run_rl_training(configuration):
     logger = configuration.logger  # jouw wandb-logger
+    logger.init_logger()
 
     controller: NetworkController = configuration.controller.controller
     rng = jax.random.PRNGKey(0)
