@@ -6,6 +6,7 @@ import flax.serialization
 import jax
 import jax.numpy as jnp
 import optax
+import wandb
 
 from configs.config import Configuration
 from src.cpg.cpg_state import CPGState
@@ -125,6 +126,7 @@ def rollout_batch_fast(
     thetas = jax.random.uniform(
         rng, shape=(num_episodes,), minval=0.0, maxval=2 * jnp.pi
     )
+
     env = Environment(configuration)
     cpg_gen = configuration.cpg.cpg_generator
 
@@ -161,22 +163,33 @@ def rollout_batch_fast(
             dy = env_state.observations["disk_position"][1]
             reward = dx * jnp.cos(theta) + dy * jnp.sin(theta)
             value = value_net.apply(value_params, obs)
-            transition = (obs, action, logprob, value, reward, 0.0)
+
+            transition = (obs, action, logprob, value, reward, 0.0, dx, dy)
             new_carry = (env_state, cpg_state)
             return new_carry, transition
 
         carry = (env_state, cpg_state)
         rngs = jax.random.split(rng, episode_length)
         carry, traj = jax.lax.scan(step_fn, carry, rngs)
-        obs, action, logprob, value, reward, done = traj
-        return obs, action, logprob, value, reward, done
+        obs, action, logprob, value, reward, done, xs, ys = traj
+
+        return (
+            obs,
+            action,
+            logprob,
+            value,
+            reward,
+            done,
+            xs,
+            ys,
+        )
 
     batched_rollout = jax.vmap(
         rollout_one_episode,
         in_axes=(0, 0, None, None, None, None, None, None, None),
     )
 
-    obs, action, logprob, value, reward, done = batched_rollout(
+    obs, action, logprob, value, reward, done, xs, ys = batched_rollout(
         episode_rngs,
         thetas,
         policy_params,
@@ -195,9 +208,11 @@ def rollout_batch_fast(
         "value": value.reshape(-1),
         "reward": reward.reshape(-1),
         "done": done.reshape(-1),
+        "xs": xs.reshape(-1),
+        "ys": ys.reshape(-1),
     }
 
-    return rng, batch
+    return rng, batch, thetas
 
 
 def run_ppo_training(configuration: Configuration):
@@ -233,7 +248,7 @@ def run_ppo_training(configuration: Configuration):
 
     log_std = jnp.zeros(action_dim)
 
-    NUM_UPDATES = 50
+    NUM_UPDATES = 5
     EPISODES_PER_UPDATE = 8
     EPISODE_LENGTH = 400
     PPO_EPOCHS = 4
@@ -270,9 +285,21 @@ def run_ppo_training(configuration: Configuration):
     rollout_fn = make_rollout_fn(configuration, policy_net, value_net)
     compute_gae_jit = jax.jit(compute_gae)
 
+    # Visualisatie
+    visited_angles = jnp.array([])
+    visited_positions = []
+
     for update in range(NUM_UPDATES):
         print(f"Update {update + 1}/{NUM_UPDATES}")
-        rng, batch = rollout_fn(rng, policy_params, value_params, log_std)
+        rng, batch, thetas = rollout_fn(rng, policy_params, value_params, log_std)
+        xs = batch["xs"].reshape(EPISODES_PER_UPDATE, EPISODE_LENGTH)
+        ys = batch["ys"].reshape(EPISODES_PER_UPDATE, EPISODE_LENGTH)
+
+        final_x = xs[:, -1]
+        final_y = ys[:, -1]
+
+        visited_angles = jnp.concatenate([visited_angles, thetas], axis=0)
+        visited_positions.extend(zip(final_x.tolist(), final_y.tolist()))
 
         rewards = batch["reward"]
         values = batch["value"]
@@ -297,6 +324,8 @@ def run_ppo_training(configuration: Configuration):
             return jnp.mean((preds - returns) ** 2)
 
         old_logprob = batch["logprob"]
+
+        # Eventueel volgorde van batch shuffelen
 
         for _ in range(PPO_EPOCHS):
             policy_loss, policy_grads = jax.value_and_grad(policy_loss_fn)(
@@ -325,6 +354,28 @@ def run_ppo_training(configuration: Configuration):
                 "eval/update": update,
             }
         )
+
+    import matplotlib.pyplot as plt
+
+    xs = jnp.array([x for x, y in visited_positions])
+    ys = jnp.array([y for x, y in visited_positions])
+
+    plt.figure()
+
+    # Alle punten
+    plt.scatter(xs, ys, c=(visited_angles / jnp.pi * 180), cmap="hsv", alpha=0.7)
+    plt.colorbar(label="theta (degrees)")
+
+    # Middenpunt (0,0) duidelijk markeren
+    plt.scatter([0], [0], s=100, marker="x")
+
+    plt.title("Explored positions")
+    plt.xlabel("x")
+    plt.ylabel("y")
+
+    logger.log({"visualization/trajectory_scatter": wandb.Image(plt)})
+
+    plt.close()
 
     # Hier kun je policy_params eventueel opslaan als je dat wilt
     save_path = Path(logger.base_folder) / "controller"
