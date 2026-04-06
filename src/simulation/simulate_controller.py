@@ -31,7 +31,6 @@ def simulate_controller(output_path: str):
     env = Environment(configuration)
     cpg_generator = configuration.cpg.cpg_generator
     # Initialiseer het netwerk voor read_controller
-    configuration.controller.controller._init_network(configuration)
     configuration.controller.controller.read_controller(
         os.path.join(output_path, "controller")
     )
@@ -55,10 +54,10 @@ def simulate_controller(output_path: str):
             ord("s"): ControlInput.DOWN,
             ord("q"): ControlInput.LEFT,
             ord("d"): ControlInput.RIGHT,
-        }.get(key, ControlInput.ZZZ)
+        }.get(key, ControlInput.WAIT)
 
         cpg_state = configuration.controller.controller.act(
-            cpg_state, control_input, configuration
+            cpg_state, control_input, configuration, env_state
         )
         cpg_state = cpg.step(cpg_state)
         actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
