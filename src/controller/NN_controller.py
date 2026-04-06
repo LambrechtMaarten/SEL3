@@ -80,6 +80,7 @@ class NNController(Controller):
 
     def train_controller(self, configuration, num_steps=2048, epochs=10):
         logger = configuration.logger
+        logger.init_logger()
         rng = configuration.random.rng
         env = Environment(configuration)
         cpg_generator = configuration.cpg.cpg_generator
@@ -93,8 +94,7 @@ class NNController(Controller):
         optimizer = optax.adam(3e-4)
         opt_state = optimizer.init(params)
 
-        for iteration in range(100):
-            # 🔹 rollout buffer
+        for iteration in range(1000):
             print(f"Starting iteration {iteration}")
             obs_buf = []
             act_buf = []
@@ -104,32 +104,52 @@ class NNController(Controller):
 
             env_state = env.reset(rng)
             cpg_state = cpg_generator.modulate_body(cpg.reset(), jnp.zeros(action_dim))
+            start = time.time()
+            control_input = ControlInput.RIGHT
 
-            for t in range(num_steps):
-                control_input = ControlInput.RIGHT
+            def scan_step(carry, _):
+                cpg_state, env_state, rng = carry
 
-                (cpg_state, env_state, _), data = step_env(
-                    env,
-                    cpg,
-                    cpg_generator,
-                    params,
-                    model,
-                    rng,
-                    (cpg_state, env_state, control_input),
-                    configuration,
+                rng, subkey = jax.random.split(rng)
+
+                x = build_obs(env_state, control_input)
+
+                dist, value = model.apply(params, x)
+                action = dist.sample(seed=subkey)
+                log_prob = dist.log_prob(action)
+
+                cpg_state_next = cpg_generator.modulate_body(cpg_state, action)
+                cpg_state_next = cpg.step(cpg_state_next)
+
+                env_state_next = env.step(
+                    cpg_generator.outputs_to_actions(
+                        cpg_state_next.outputs, configuration
+                    ),
+                    env_state,
                 )
 
-                obs, act, logp, val, rew = data
+                reward = env_state_next.observations["disk_position"][0]
 
-                obs_buf.append(obs)
-                act_buf.append(act)
-                logp_buf.append(logp)
-                rew_buf.append(rew)
-                val_buf.append(val)
+                new_carry = (cpg_state_next, env_state_next, rng)
+                output = (x, action, log_prob, value, reward)
 
+                return new_carry, output
+
+            (_, _, _), traj = jax.lax.scan(
+                scan_step,
+                (cpg_state, env_state, rng),
+                xs=None,
+                length=num_steps,
+            )
+
+            obs_buf, act_buf, logp_buf, val_buf, rew_buf = traj
+
+            print(f"Rollout took {time.time() - start:.2f} seconds")
+            start = time.time()
             # bootstrap value
             _, last_val = model.apply(params, obs_buf[-1])
-            val_buf.append(last_val)
+            val_buf = jnp.append(val_buf, last_val)
+            print(f"Bootstrapping value took {time.time() - start:.2f} seconds")
 
             # log rewards
             print(f"Total reward: {sum(rew_buf)}")
