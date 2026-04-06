@@ -94,6 +94,61 @@ class NNController(Controller):
         optimizer = optax.adam(3e-4)
         opt_state = optimizer.init(params)
 
+        def make_rollout_fn(env, cpg_generator, model, configuration, num_steps):
+            def rollout_fn(rng, params):
+                def scan_step(carry, _):
+                    cpg_state, env_state, rng = carry
+
+                    rng, subkey = jax.random.split(rng)
+
+                    x = build_obs(env_state, ControlInput.RIGHT)
+
+                    dist, value = model.apply(params, x)
+                    action = dist.sample(seed=subkey)
+                    log_prob = dist.log_prob(action)
+
+                    cpg_state = cpg_generator.modulate_body(cpg_state, action)
+                    cpg_state = cpg.step(cpg_state)
+
+                    env_state = env.step(
+                        cpg_generator.outputs_to_actions(
+                            cpg_state.outputs, configuration
+                        ),
+                        env_state,
+                    )
+
+                    reward = env_state.observations["disk_position"][0]
+
+                    return (cpg_state, env_state, rng), (
+                        x,
+                        action,
+                        log_prob,
+                        value,
+                        reward,
+                    )
+
+                init = (
+                    cpg_generator.modulate_body(
+                        cpg_generator.generate(configuration).reset(),
+                        jnp.zeros(
+                            cpg_generator.body_to_jarr(
+                                cpg_generator.generate(configuration).reset()
+                            ).size
+                        ),
+                    ),
+                    env.reset(rng),
+                    rng,
+                )
+
+                (_, _, _), traj = jax.lax.scan(scan_step, init, None, length=num_steps)
+
+                return traj
+
+            return jax.jit(rollout_fn)
+
+        rollout_fn = make_rollout_fn(
+            env, cpg_generator, model, configuration, num_steps
+        )
         for iteration in range(1000):
             print(f"Starting iteration {iteration}")
             obs_buf = []
@@ -102,54 +157,13 @@ class NNController(Controller):
             rew_buf = []
             val_buf = []
 
-            env_state = env.reset(rng)
-            cpg_state = cpg_generator.modulate_body(cpg.reset(), jnp.zeros(action_dim))
-            start = time.time()
-            control_input = ControlInput.RIGHT
-
-            def scan_step(carry, _):
-                cpg_state, env_state, rng = carry
-
-                rng, subkey = jax.random.split(rng)
-
-                x = build_obs(env_state, control_input)
-
-                dist, value = model.apply(params, x)
-                action = dist.sample(seed=subkey)
-                log_prob = dist.log_prob(action)
-
-                cpg_state_next = cpg_generator.modulate_body(cpg_state, action)
-                cpg_state_next = cpg.step(cpg_state_next)
-
-                env_state_next = env.step(
-                    cpg_generator.outputs_to_actions(
-                        cpg_state_next.outputs, configuration
-                    ),
-                    env_state,
-                )
-
-                reward = env_state_next.observations["disk_position"][0]
-
-                new_carry = (cpg_state_next, env_state_next, rng)
-                output = (x, action, log_prob, value, reward)
-
-                return new_carry, output
-
-            (_, _, _), traj = jax.lax.scan(
-                scan_step,
-                (cpg_state, env_state, rng),
-                xs=None,
-                length=num_steps,
-            )
+            traj = rollout_fn(rng, params)
 
             obs_buf, act_buf, logp_buf, val_buf, rew_buf = traj
 
-            print(f"Rollout took {time.time() - start:.2f} seconds")
-            start = time.time()
             # bootstrap value
             _, last_val = model.apply(params, obs_buf[-1])
             val_buf = jnp.append(val_buf, last_val)
-            print(f"Bootstrapping value took {time.time() - start:.2f} seconds")
 
             # log rewards
             print(f"Total reward: {sum(rew_buf)}")
