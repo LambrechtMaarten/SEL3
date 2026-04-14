@@ -3,12 +3,18 @@ from configs.subcontrollers.controller.controller_configurations import (
     ControllerConfiguration,
 )
 from src.controller.NN_controller import NNController
+from src.controller.NN_controller_multi import NNControllerMulti
 from src.controller.one_direction_controller import OneDirectionController
 
 
 def register():
     SubConfigurationMap.add_configuration(
         ControllerConfiguration, ControllerConfiguration("network", NNController())
+    )
+
+    SubConfigurationMap.add_configuration(
+        ControllerConfiguration,
+        ControllerConfiguration("network_multi", NNControllerMulti()),
     )
 
     SubConfigurationMap.add_configuration(

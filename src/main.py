@@ -13,7 +13,6 @@ from configs.subcontrollers.register import register
 from configs.subcontrollers.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
-from src.controller.NN_controller import NNController
 from src.render.render_video import render_saved_controller
 from src.simulation.simulate_controller import simulate_controller
 from src.training.train_controller import train_controller
@@ -45,12 +44,14 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
             SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "network"),
+            SubConfigurationMap.get_configuration(
+                ControllerConfiguration, "network_multi"
+            ),
         )
 
         # Laad de getrainde CPG-parameters voor RIGHT
         # controller_path = sys.argv[2]
-        controller: NNController = configuration.controller.controller
+        controller = configuration.controller.controller
         controller.train_controller(configuration)
 
     elif sys.argv[1] == "simulate":

@@ -47,14 +47,14 @@ class ActorCritic(nn.Module):
         return dist, jnp.squeeze(value, axis=-1)
 
 
-def network_output_to_body(action, cpg_state):
+def network_output_to_body(action, cpg_state, leading_arm_idx):
     """Vul freq + amplitudes in vanuit netwerk, hou offsets en phase biases vast."""
     frequency = action[0:1]
     amplitudes = action[1:]
 
     default_cpg_state = BasicCPGGenerator.modulate_cpg(
         cpg_state=cpg_state,
-        leading_arm_index=0,
+        leading_arm_index=leading_arm_idx,
         max_joint_limit=1.0,
     )
 
@@ -68,14 +68,6 @@ def network_output_to_body(action, cpg_state):
     )
 
 
-CONTROL_INPUT_TO_ANGLE = {
-    ControlInput.RIGHT: 0.0,
-    ControlInput.UP: jnp.pi * 0.4,
-    ControlInput.LEFT: jnp.pi * 0.8,
-    ControlInput.DOWN: jnp.pi * 1.2,
-}
-
-
 def angle_to_arm(angle):
     """Kies de arm wiens richting het dichtst bij de gewenste hoek ligt."""
     # Arm i ligt op i * 72° = i * 2pi/5
@@ -85,7 +77,34 @@ def angle_to_arm(angle):
     return jnp.argmin(diff)
 
 
-class NNController(Controller):
+def angle_reward(prev_pos, curr_pos, angle):
+    delta = curr_pos[:2] - prev_pos[:2]
+    direction = jnp.array([jnp.cos(angle), jnp.sin(angle)])
+    return jnp.dot(delta, direction)
+
+
+def build_obs_angle(env_state, angle):
+    obs = env_state.observations
+    # Encodeer hoek als sin/cos zodat 0° en 360° hetzelfde zijn
+    angle_enc = jnp.array([jnp.sin(angle), jnp.cos(angle)])
+    return jnp.concatenate(
+        [
+            obs["disk_position"][0:2],
+            jnp.array([obs["disk_rotation"][2]]),
+            angle_enc,
+        ]
+    )
+
+
+CONTROL_INPUT_TO_ANGLE = {
+    ControlInput.RIGHT: 0.0,
+    ControlInput.UP: jnp.pi * 0.4,
+    ControlInput.LEFT: jnp.pi * 0.8,
+    ControlInput.DOWN: jnp.pi * 1.2,
+}
+
+
+class NNControllerMulti(Controller):
     def __init__(self):
         self.params = None
         self.model = None
@@ -103,24 +122,16 @@ class NNController(Controller):
         cpg_generator = configuration.cpg.cpg_generator
 
         obs = env_state.observations
+        angle = CONTROL_INPUT_TO_ANGLE[control_input]
 
-        x = jnp.concatenate(
-            [
-                obs["disk_position"],
-                obs["disk_rotation"],
-                jax.nn.one_hot(ControlInput.RIGHT.value, 5),
-            ]
-        )
+        x = build_obs_angle(env_state, angle)
 
         dist, value = self.model.apply(self.params, x)
 
         action = dist.mode()
-        angle = CONTROL_INPUT_TO_ANGLE[control_input]
         leading_arm_index = angle_to_arm(angle)
-        full_body = network_output_to_body(action, cpg_state)
-        return cpg_generator.modulate_symmetric_rotation(
-            cpg_generator.modulate_body(cpg_state, full_body), leading_arm_index
-        )
+        full_body = network_output_to_body(action, cpg_state, leading_arm_index)
+        return cpg_generator.modulate_body(cpg_state, full_body)
 
     def train_controller(self, configuration, num_steps=800, epochs=8):
         logger = configuration.logger
@@ -134,7 +145,7 @@ class NNController(Controller):
         model = ActorCritic(action_dim=action_dim)
 
         dummy_env = env.reset(rng)
-        dummy_input = build_obs(dummy_env, ControlInput.RIGHT)
+        dummy_input = build_obs_angle(dummy_env, 0.0)
         params = model.init(rng, dummy_input)
         optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
         opt_state = optimizer.init(params)
@@ -144,16 +155,23 @@ class NNController(Controller):
                 def scan_step(carry, _):
                     cpg_state, env_state, rng = carry
 
-                    rng, subkey = jax.random.split(rng)
+                    rng, subkey_action, subkey_angle = jax.random.split(rng, 3)
 
-                    x = build_obs(env_state, ControlInput.RIGHT)
+                    angle = jax.random.choice(
+                        subkey_angle, jnp.arange(5) * (2 * jnp.pi / 5)
+                    )
+                    x = build_obs_angle(env_state, angle)
 
                     dist, value = model.apply(params, x)
-                    action = dist.sample(seed=subkey)
+                    action = dist.sample(seed=subkey_action)
                     log_prob = dist.log_prob(action)
 
-                    prev_x = env_state.observations["disk_position"][0]
-                    full_body = network_output_to_body(action, cpg_state)
+                    prev_pos = env_state.observations["disk_position"]
+
+                    leading_arm_index = angle_to_arm(angle)
+                    full_body = network_output_to_body(
+                        action, cpg_state, leading_arm_index
+                    )
                     cpg_state = cpg_generator.modulate_body(cpg_state, full_body)
                     cpg_state = cpg.step(cpg_state)
 
@@ -164,7 +182,8 @@ class NNController(Controller):
                         env_state,
                     )
 
-                    reward = env_state.observations["disk_position"][0] - prev_x
+                    curr_pos = env_state.observations["disk_position"]
+                    reward = angle_reward(prev_pos, curr_pos, angle)
 
                     return (cpg_state, env_state, rng), (
                         x,
@@ -204,7 +223,7 @@ class NNController(Controller):
         rollout_fn = make_rollout_fn(
             env, cpg_generator, model, configuration, num_steps
         )
-        for iteration in range(202):
+        for iteration in range(100):
             rng, subkey = jax.random.split(rng)
             print(f"Starting iteration {iteration}")
             obs_buf = []
@@ -287,18 +306,6 @@ class NNController(Controller):
     def genome_size(self, configuration):
         flat_params, _ = jax.flatten_util.ravel_pytree(self.params)
         return flat_params.shape[0]
-
-
-def build_obs(env_state, control_input):
-    obs = env_state.observations
-
-    return jnp.concatenate(
-        [
-            obs["disk_position"],
-            obs["disk_rotation"],
-            jax.nn.one_hot(control_input.value, 5),
-        ]
-    )
 
 
 def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
