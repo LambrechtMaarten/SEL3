@@ -9,6 +9,7 @@ import optax
 
 from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
+from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
 from src.environment.environment import Environment
 
 
@@ -34,7 +35,9 @@ class ActorCritic(nn.Module):
         x = nn.tanh(x)
 
         # policy
-        mean = nn.Dense(self.action_dim)(x)
+        freq_amp = nn.Dense(1 + 10, bias_init=nn.initializers.ones)(x)  # hoge bias
+        offsets = nn.Dense(10, bias_init=nn.initializers.zeros)(x)  # nul bias
+        mean = jnp.concatenate([freq_amp, offsets], axis=-1)
         log_std = self.param("log_std", nn.initializers.zeros, (self.action_dim,))
         std = jnp.exp(log_std)
 
@@ -46,6 +49,29 @@ class ActorCritic(nn.Module):
         return dist, jnp.squeeze(value, axis=-1)
 
 
+def network_output_to_body(action, cpg_state):
+    """Vul freq + amplitudes in vanuit netwerk, hou offsets en phase biases vast."""
+    frequency = action[0:1]
+    n = cpg_state.amplitude_goals.size  # 10
+    amplitudes = action[1 : 1 + n]
+    offsets = action[1 + n :]
+
+    default_cpg_state = BasicCPGGenerator.modulate_cpg(
+        cpg_state=cpg_state,
+        leading_arm_index=0,
+        max_joint_limit=1.0,
+    )
+
+    return jnp.concatenate(
+        [
+            frequency,
+            amplitudes,
+            offsets,  # vast houden op huidige waarden
+            default_cpg_state.coupled_phase_biases.ravel(),  # vast houden
+        ]
+    )
+
+
 class NNController(Controller):
     def __init__(self):
         self.params = None
@@ -54,6 +80,7 @@ class NNController(Controller):
     def act(self, cpg_state, control_input, configuration, env_state):
         if control_input == ControlInput.WAIT:
             cpg_generator = configuration.cpg.cpg_generator
+
             return cpg_generator.modulate_body(
                 cpg_state,
                 cpg_generator.body_to_jarr(
@@ -75,23 +102,24 @@ class NNController(Controller):
         dist, value = self.model.apply(self.params, x)
 
         action = dist.mode()
+        full_body = network_output_to_body(action, cpg_state)
+        return cpg_generator.modulate_body(cpg_state, full_body)
 
-        return cpg_generator.modulate_body(cpg_state, action)
-
-    def train_controller(self, configuration, num_steps=2048, epochs=10):
+    def train_controller(self, configuration, num_steps=800, epochs=8):
         logger = configuration.logger
         logger.init_logger()
         rng = configuration.random.rng
         env = Environment(configuration)
         cpg_generator = configuration.cpg.cpg_generator
         cpg = cpg_generator.generate(configuration)
-        action_dim = cpg_generator.body_to_jarr(cpg.reset()).size
+        cpg_reset = cpg.reset()
+        action_dim = 1 + cpg_reset.amplitude_goals.size + cpg_reset.offset_goals.size
         model = ActorCritic(action_dim=action_dim)
 
         dummy_env = env.reset(rng)
         dummy_input = build_obs(dummy_env, ControlInput.RIGHT)
         params = model.init(rng, dummy_input)
-        optimizer = optax.adam(3e-4)
+        optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
         opt_state = optimizer.init(params)
 
         def make_rollout_fn(env, cpg_generator, model, configuration, num_steps):
@@ -107,7 +135,9 @@ class NNController(Controller):
                     action = dist.sample(seed=subkey)
                     log_prob = dist.log_prob(action)
 
-                    cpg_state = cpg_generator.modulate_body(cpg_state, action)
+                    prev_x = env_state.observations["disk_position"][0]
+                    full_body = network_output_to_body(action, cpg_state)
+                    cpg_state = cpg_generator.modulate_body(cpg_state, full_body)
                     cpg_state = cpg.step(cpg_state)
 
                     env_state = env.step(
@@ -117,7 +147,7 @@ class NNController(Controller):
                         env_state,
                     )
 
-                    reward = env_state.observations["disk_position"][0]
+                    reward = env_state.observations["disk_position"][0] - prev_x
 
                     return (cpg_state, env_state, rng), (
                         x,
@@ -127,15 +157,23 @@ class NNController(Controller):
                         reward,
                     )
 
-                init = (
-                    cpg_generator.modulate_body(
-                        cpg_generator.generate(configuration).reset(),
-                        jnp.zeros(
-                            cpg_generator.body_to_jarr(
-                                cpg_generator.generate(configuration).reset()
-                            ).size
-                        ),
+                init_cpg_state = BasicCPGGenerator.modulate_cpg(
+                    cpg_state=cpg_generator.generate(configuration).reset(),
+                    leading_arm_index=0,
+                    max_joint_limit=1.0,
+                )
+
+                init_cpg_state_full = cpg_generator.modulate_body(
+                    cpg_generator.generate(configuration).reset(),
+                    jnp.zeros(
+                        cpg_generator.body_to_jarr(
+                            cpg_generator.generate(configuration).reset()
+                        ).size
                     ),
+                )
+
+                init = (
+                    init_cpg_state,
                     env.reset(rng),
                     rng,
                 )
@@ -149,7 +187,8 @@ class NNController(Controller):
         rollout_fn = make_rollout_fn(
             env, cpg_generator, model, configuration, num_steps
         )
-        for iteration in range(1000):
+        for iteration in range(100):
+            rng, subkey = jax.random.split(rng)
             print(f"Starting iteration {iteration}")
             obs_buf = []
             act_buf = []
@@ -157,7 +196,7 @@ class NNController(Controller):
             rew_buf = []
             val_buf = []
 
-            traj = rollout_fn(rng, params)
+            traj = rollout_fn(subkey, params)
 
             obs_buf, act_buf, logp_buf, val_buf, rew_buf = traj
 
@@ -167,30 +206,19 @@ class NNController(Controller):
 
             # log rewards
             print(f"Total reward: {sum(rew_buf)}")
+            print(f"Max reward per step: {jnp.max(rew_buf):.4f}")
+            print(f"Min reward per step: {jnp.min(rew_buf):.4f}")
+            print(f"Final x position: {obs_buf[-1][0]:.4f}")
             print("Average reward per step:", sum(rew_buf) / len(rew_buf))
-            logger.log(
-                {
-                    "total_reward": sum(rew_buf),
-                    "average_reward": sum(rew_buf) / len(rew_buf),
-                },
-            )
 
-            # Normaliseer advantages
             advantages = compute_gae(rew_buf, val_buf, jnp.zeros(len(rew_buf)))
-            mean = jnp.mean(advantages)
-            std = jnp.std(advantages)
-            advantages = (advantages - mean) / (std + 1e-8)
 
             returns = advantages + jnp.array(val_buf[:-1])
             print("Average advantage:", jnp.mean(advantages))
             print("Average return:", jnp.mean(returns))
-            logger.log(
-                {
-                    "average_advantage": jnp.mean(advantages),
-                    "stdev_advantage": jnp.std(advantages),
-                    "average_return": jnp.mean(returns),
-                },
-            )
+            advantages = (advantages - jnp.mean(advantages)) / (
+                jnp.std(advantages) + 1e-8
+            )  # then normalize
 
             batch = (
                 jnp.array(obs_buf),
@@ -205,7 +233,16 @@ class NNController(Controller):
                     params, opt_state, model, batch, optimizer
                 )
 
-            logger.log({"loss": loss})
+            logger.log(
+                {
+                    "total_reward": sum(rew_buf),
+                    "average_reward": sum(rew_buf) / len(rew_buf),
+                    "average_advantage": jnp.mean(advantages),
+                    "stdev_advantage": jnp.std(advantages),
+                    "average_return": jnp.mean(returns),
+                    "loss": loss,
+                },
+            )
             print(f"Iter {iteration}, loss {loss}")
         # Na afloop van de training, sla de parameters op
         self.params = params
@@ -244,29 +281,6 @@ def build_obs(env_state, control_input):
             jax.nn.one_hot(control_input.value, 5),
         ]
     )
-
-
-def step_env(env, cpg, cpg_generator, params, model, rng, state, configuration):
-    cpg_state, env_state, control_input = state
-
-    x = build_obs(env_state, control_input)
-
-    dist, value = model.apply(params, x)
-    rng, subkey = jax.random.split(rng)
-    action = dist.sample(seed=subkey)
-    log_prob = dist.log_prob(action)
-
-    # 👉 NN output → CPG body
-    cpg_state = cpg_generator.modulate_body(cpg_state, action)
-    cpg_state = cpg.step(cpg_state)
-
-    env_state = env.step(
-        cpg_generator.outputs_to_actions(cpg_state.outputs, configuration), env_state
-    )
-
-    reward = env_state.observations["disk_position"][0]
-
-    return (cpg_state, env_state, control_input), (x, action, log_prob, value, reward)
 
 
 def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):

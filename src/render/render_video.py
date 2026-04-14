@@ -25,7 +25,7 @@ def render_saved_controller(controller_path: str):
         SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
         SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
         SubConfigurationMap.get_configuration(GeneticConfiguration, "crossover"),
-        SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "network"),
     )
 
     configuration.logger.init_logger()
@@ -44,7 +44,9 @@ def render_saved_controller(controller_path: str):
     frames = []
 
     while not (env_state.terminated | env_state.truncated):
-        cpg_state = controller.act(cpg_state, ControlInput.LEFT, configuration)
+        cpg_state = controller.act(
+            cpg_state, ControlInput.RIGHT, configuration, env_state
+        )
 
         cpg_state = cpg.step(cpg_state)
 
