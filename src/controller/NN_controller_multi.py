@@ -152,14 +152,16 @@ class NNControllerMulti(Controller):
 
         def make_rollout_fn(env, cpg_generator, model, configuration, num_steps):
             def rollout_fn(rng, params):
+                rng, subkey_angle = jax.random.split(rng)
+                angle = jax.random.uniform(
+                    subkey_angle, (), minval=0.0, maxval=2 * jnp.pi
+                )
+
                 def scan_step(carry, _):
                     cpg_state, env_state, rng = carry
 
-                    rng, subkey_action, subkey_angle = jax.random.split(rng, 3)
+                    rng, subkey_action = jax.random.split(rng)
 
-                    angle = jax.random.choice(
-                        subkey_angle, jnp.arange(5) * (2 * jnp.pi / 5)
-                    )
                     x = build_obs_angle(env_state, angle)
 
                     dist, value = model.apply(params, x)
@@ -223,19 +225,19 @@ class NNControllerMulti(Controller):
         rollout_fn = make_rollout_fn(
             env, cpg_generator, model, configuration, num_steps
         )
-        for iteration in range(100):
-            rng, subkey = jax.random.split(rng)
-            print(f"Starting iteration {iteration}")
-            obs_buf = []
-            act_buf = []
-            logp_buf = []
-            rew_buf = []
-            val_buf = []
 
-            traj = rollout_fn(subkey, params)
+        for iteration in range(200):
+            rng, s1, s2, s3 = jax.random.split(rng, 4)
 
-            # Combineer trajectories
-            (obs_buf, act_buf, logp_buf, val_buf, rew_buf) = traj
+            traj1 = rollout_fn(s1, params)
+            traj2 = rollout_fn(s2, params)
+            traj3 = rollout_fn(s3, params)
+
+            obs_buf = jnp.concatenate([traj1[0], traj2[0], traj3[0]])
+            act_buf = jnp.concatenate([traj1[1], traj2[1], traj3[1]])
+            logp_buf = jnp.concatenate([traj1[2], traj2[2], traj3[2]])
+            val_buf = jnp.concatenate([traj1[3], traj2[3], traj3[3]])
+            rew_buf = jnp.concatenate([traj1[4], traj2[4], traj3[4]])
 
             # bootstrap value
             _, last_val = model.apply(params, obs_buf[-1])
