@@ -14,19 +14,23 @@ from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
 from src.environment.environment import Environment
 from src.controller.BaseNNController import BaseNNController
 
-CONTROL_INPUT_TO_ANGLE = {
-    ControlInput.RIGHT: 0.0,
-    ControlInput.UP: jnp.pi * 0.4,
-    ControlInput.LEFT: jnp.pi * 0.8,
-    ControlInput.DOWN: jnp.pi * 1.2,
-}
-
-class NNControllerKeys(BaseNNController):
+class NNControllerPretrain(BaseNNController):
     def __init__(self):
         super().__init__(1 + 10)
 
-    def act(self, cpg_state, control_input, configuration, env_state):        
-        if control_input < ControlInput.WAIT:
+    def pretrain():
+        pass
+
+    def act(self, cpg_state, control_input, configuration, env_state):
+        STOP_THRESHOLD = 0.05 
+        
+        obs = env_state.observations
+        robot_pos = obs["disk_position"][0:2]
+        deltas = jnp.array(control_input) - robot_pos
+        distance = jnp.linalg.norm(deltas)
+
+        # Target reached
+        if distance < STOP_THRESHOLD:
             cpg_generator = configuration.cpg.cpg_generator
 
             return cpg_generator.modulate_body(
@@ -36,9 +40,13 @@ class NNControllerKeys(BaseNNController):
                 ),
             )
         cpg_generator = configuration.cpg.cpg_generator
+        
 
-        obs = env_state.observations
-        angle = CONTROL_INPUT_TO_ANGLE[control_input]
+        angle = jnp.arctan2(deltas[1], deltas[0])
+        
+        print(f"Going towards: {jnp.degrees(angle)}°")
+        print("POSITION: ", robot_pos)
+
         rot = obs["disk_rotation"][2]
 
         x = self.build_obs_angle(env_state, angle)

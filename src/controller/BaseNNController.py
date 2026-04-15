@@ -34,7 +34,7 @@ class ActorCritic(nn.Module):
         x = nn.tanh(x)
 
         # policy
-        mean = nn.Dense(self.action_dim, bias_init=nn.initializers.ones)(x)
+        mean = nn.Dense(1 + 10, bias_init=nn.initializers.ones)(x)
         log_std = self.param("log_std", nn.initializers.zeros, (self.action_dim,))
         std = jnp.exp(log_std)
 
@@ -46,9 +46,11 @@ class ActorCritic(nn.Module):
         return dist, jnp.squeeze(value, axis=-1)
 
 class BaseNNController(Controller, ABC):
-    def __init__(self):
+    def __init__(self, action_dim):
+        self.action_dim = action_dim
         self.params = None
         self.model = None
+        self.model = ActorCritic(action_dim=self.action_dim)
 
     @abstractmethod
     def act(self, cpg_state, control_input, configuration, env_state):
@@ -58,10 +60,13 @@ class BaseNNController(Controller, ABC):
     def evaluator(configuration, rng):
         pass
 
-    def angle_reward(self, prev_pos, curr_pos, angle):
+    def angle_reward(self, prev_pos, curr_pos, prev_rot, curr_rot, angle):
         delta = curr_pos[:2] - prev_pos[:2]
         direction = jnp.array([jnp.cos(angle), jnp.sin(angle)])
-        return jnp.dot(delta, direction)
+
+        rotation_penalty = jnp.abs(curr_rot - prev_rot)
+
+        return jnp.dot(delta, direction) # - 0.02 *rotation_penalty
 
     def build_obs_angle(self, env_state, angle):
         obs = env_state.observations
@@ -69,7 +74,7 @@ class BaseNNController(Controller, ABC):
         angle_enc = jnp.array([jnp.sin(angle), jnp.cos(angle)])
         return jnp.concatenate(
             [
-                obs["disk_position"][0:2],
+                # obs["disk_position"][0:2],
                 jnp.array([obs["disk_rotation"][2]]),
                 angle_enc,
             ]
@@ -94,6 +99,9 @@ class BaseNNController(Controller, ABC):
                 default_cpg_state.coupled_phase_biases.ravel(),  # vast houden
             ]
         )
+    
+    def get_angles(self, key=None):
+        return jnp.arange(5) * (2 * jnp.pi / 5)
 
     def angle_to_arm_relative(self, angle, disk_rotation_z):
         """Bereken welke arm het dichtst bij de gewenste richting ligt,
@@ -101,7 +109,7 @@ class BaseNNController(Controller, ABC):
         # Relatieve hoek: gewenste richting min huidige rotatie
         relative_angle = angle - disk_rotation_z
 
-        arm_angles = jnp.arange(5) * (2 * jnp.pi / 5)
+        arm_angles = self.get_angles()
         diff = jnp.abs((relative_angle - arm_angles + jnp.pi) % (2 * jnp.pi) - jnp.pi)
         return jnp.argmin(diff)
 
@@ -115,13 +123,10 @@ class BaseNNController(Controller, ABC):
         cpg = cpg_generator.generate(configuration)
 
         cpg_reset = cpg.reset()
-        action_dim = 1 + cpg_reset.amplitude_goals.size
-
-        model = ActorCritic(action_dim=action_dim)
 
         dummy_env = env.reset(rng)
         dummy_input = self.build_obs_angle(dummy_env, 0.0)
-        params = model.init(rng, dummy_input)
+        params = self.model.init(rng, dummy_input)
 
         optimizer = optax.chain(
             optax.clip_by_global_norm(0.5),
@@ -130,7 +135,7 @@ class BaseNNController(Controller, ABC):
         opt_state = optimizer.init(params)
 
         rollout_fn = self._make_rollout_fn(
-            env, cpg_generator, model, configuration, num_steps
+            env, cpg_generator, self.model, configuration, num_steps
         )
 
         def rollout_many(rng, params, angles):
@@ -139,9 +144,8 @@ class BaseNNController(Controller, ABC):
 
         for iteration in range(250):
             print(f"Starting iteration {iteration}")
-
-            arm_angles = jnp.arange(5) * (2 * jnp.pi / 5)
-            rng, subkey = jax.random.split(rng)
+            rng, subkey, angle_key = jax.random.split(rng, 3)
+            arm_angles = self.get_angles(angle_key)
 
             traj = rollout_many(subkey, params, arm_angles)
 
@@ -152,7 +156,7 @@ class BaseNNController(Controller, ABC):
             logp_buf = all_logp.reshape(-1)
             rew_buf = all_rew.reshape(-1)
 
-            _, last_vals = jax.vmap(lambda o: model.apply(params, o[-1]))(all_obs)
+            _, last_vals = jax.vmap(lambda o: self.model.apply(params, o[-1]))(all_obs)
             val_bufs = jax.vmap(lambda v, lv: jnp.append(v, lv))(all_val, last_vals)
 
             advantages_list = [
@@ -170,6 +174,14 @@ class BaseNNController(Controller, ABC):
             ])
             returns = jnp.concatenate(returns_list)
 
+            print(f"Total reward: {jnp.sum(rew_buf)}")
+            print(f"Avg_reward: {jnp.sum(rew_buf) / len(arm_angles)}")
+            print(f"Max reward: {jnp.max(jnp.sum(all_rew, axis=1)):.4f}")
+            print(f"Min reward: {jnp.min(jnp.sum(all_rew, axis=1)):.4f}")
+            print("Average reward per step:", jnp.sum(rew_buf) / len(rew_buf))
+            print("Average advantage:", jnp.mean(advantages))
+            print("Average return:", jnp.mean(returns))
+
             batch = (
                 jnp.array(obs_buf),
                 jnp.array(act_buf),
@@ -180,20 +192,31 @@ class BaseNNController(Controller, ABC):
 
             for _ in range(epochs):
                 params, opt_state, loss = update_step_jit(
-                    params, opt_state, model, batch, optimizer
+                    params, opt_state, self.model, batch, optimizer
                 )
+            
+            logger.log(
+                {
+                    "total_reward": jnp.sum(rew_buf),
+                    "average_reward": jnp.sum(rew_buf) / len(arm_angles),
+                    "average_reward_per_step": jnp.sum(rew_buf) / len(rew_buf),
+                    "average_advantage": jnp.mean(advantages),
+                    "average_return": jnp.mean(returns),
+                    "loss": loss,
+                },
+            )
+	
 
             print(f"Iter {iteration}, loss {loss}")
 
         self.params = params
-        self.model = model
         self.save_controller(configuration.logger)
 
     def _make_rollout_fn(self, env, cpg_generator, model, configuration, num_steps):
         def rollout_fn(rng, params, angle):
 
             def scan_step(carry, _):
-                cpg_state, env_state, rng = carry
+                cpg_state, env_state, prev_arm, rng = carry
                 rng, subkey = jax.random.split(rng)
 
                 x = self.build_obs_angle(env_state, angle)
@@ -203,11 +226,13 @@ class BaseNNController(Controller, ABC):
                 log_prob = dist.log_prob(action)
 
                 prev_pos = env_state.observations["disk_position"]
+                prev_rot = env_state.observations["disk_rotation"][2]
 
                 leading_arm_index = self.angle_to_arm_relative(
                     angle,
                     env_state.observations["disk_rotation"][2]
                 )
+
 
                 full_body = self.network_output_to_body(
                     action, cpg_state, leading_arm_index
@@ -224,19 +249,21 @@ class BaseNNController(Controller, ABC):
                 )
 
                 curr_pos = env_state.observations["disk_position"]
-                reward = self.angle_reward(prev_pos, curr_pos, angle)
+                curr_rot = env_state.observations["disk_rotation"][2]
+                reward = self.angle_reward(prev_pos, curr_pos, prev_rot, curr_rot, angle) # - arm_switch_penalty
 
-                return (cpg_state, env_state, rng), (
+                return (cpg_state, env_state, leading_arm_index, rng), (
                     x, action, log_prob, value, reward
                 )
 
             init = (
                 cpg_generator.generate(configuration).reset(),
                 env.reset(rng),
+                self.angle_to_arm_relative(angle, 0.0),
                 rng,
             )
 
-            (_, _, _), traj = jax.lax.scan(scan_step, init, None, length=num_steps)
+            (_, _, _, _), traj = jax.lax.scan(scan_step, init, None, length=num_steps)
             return traj
 
         return jax.jit(rollout_fn)
@@ -251,6 +278,7 @@ class BaseNNController(Controller, ABC):
     def read_controller(self, path: str):
         with open(path, "rb") as f:
             self.params = pickle.load(f)
+            print(self.params["params"]["Dense_2"]["kernel"].shape[1])
             self.model = ActorCritic(
                 action_dim=self.params["params"]["Dense_2"]["kernel"].shape[1]
             )

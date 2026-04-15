@@ -16,7 +16,7 @@ from src.controller.BaseNNController import BaseNNController
 
 class NNControllerTarget(BaseNNController):
     def __init__(self):
-        super().__init__()
+        super().__init__(1 + 10)
 
     def act(self, cpg_state, control_input, configuration, env_state):
         STOP_THRESHOLD = 0.05 
@@ -37,9 +37,11 @@ class NNControllerTarget(BaseNNController):
                 ),
             )
         cpg_generator = configuration.cpg.cpg_generator
+        def wrap_angle(angle):
+            return (angle + jnp.pi) % (2 * jnp.pi) - jnp.pi
 
-        angle = jnp.arctan2(deltas[1], deltas[0])
-        print(angle)
+        angle = wrap_angle(jnp.arctan2(deltas[1], deltas[0]))
+        
         print(f"Going towards: {jnp.degrees(angle)}°")
         print("POSITION: ", robot_pos)
 
