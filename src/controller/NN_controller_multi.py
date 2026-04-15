@@ -151,12 +151,7 @@ class NNControllerMulti(Controller):
         opt_state = optimizer.init(params)
 
         def make_rollout_fn(env, cpg_generator, model, configuration, num_steps):
-            def rollout_fn(rng, params):
-                rng, subkey_angle = jax.random.split(rng)
-                angle = jax.random.uniform(
-                    subkey_angle, (), minval=0.0, maxval=2 * jnp.pi
-                )
-
+            def rollout_fn(rng, params, angle):
                 def scan_step(carry, _):
                     cpg_state, env_state, rng = carry
 
@@ -197,17 +192,8 @@ class NNControllerMulti(Controller):
 
                 init_cpg_state = BasicCPGGenerator.modulate_cpg(
                     cpg_state=cpg_generator.generate(configuration).reset(),
-                    leading_arm_index=0,
+                    leading_arm_index=angle_to_arm(angle),
                     max_joint_limit=1.0,
-                )
-
-                init_cpg_state_full = cpg_generator.modulate_body(
-                    cpg_generator.generate(configuration).reset(),
-                    jnp.zeros(
-                        cpg_generator.body_to_jarr(
-                            cpg_generator.generate(configuration).reset()
-                        ).size
-                    ),
                 )
 
                 init = (
@@ -226,38 +212,55 @@ class NNControllerMulti(Controller):
             env, cpg_generator, model, configuration, num_steps
         )
 
+        def rollout_many(rng, params, angles, rollout_fn):
+            keys = jax.random.split(rng, len(angles))
+            return jax.vmap(rollout_fn, in_axes=(0, None, 0))(keys, params, angles)
+
         for iteration in range(200):
-            rng, s1, s2, s3 = jax.random.split(rng, 4)
+            print(f"Starting iteration {iteration}")
 
-            traj1 = rollout_fn(s1, params)
-            traj2 = rollout_fn(s2, params)
-            traj3 = rollout_fn(s3, params)
+            # Each iteration we do a rollout for each leading arm
+            arm_angles = jnp.arange(5) * (2 * jnp.pi / 5)
+            rng, subkey = jax.random.split(rng)
+            traj = rollout_many(subkey, params, arm_angles, rollout_fn)
 
-            obs_buf = jnp.concatenate([traj1[0], traj2[0], traj3[0]])
-            act_buf = jnp.concatenate([traj1[1], traj2[1], traj3[1]])
-            logp_buf = jnp.concatenate([traj1[2], traj2[2], traj3[2]])
-            val_buf = jnp.concatenate([traj1[3], traj2[3], traj3[3]])
-            rew_buf = jnp.concatenate([traj1[4], traj2[4], traj3[4]])
+            all_obs, all_act, all_logp, all_val, all_rew = traj
 
-            # bootstrap value
-            _, last_val = model.apply(params, obs_buf[-1])
-            val_buf = jnp.append(val_buf, last_val)
+            obs_buf = all_obs.reshape(-1, all_obs.shape[-1])
+            act_buf = all_act.reshape(-1, all_act.shape[-1])
+            logp_buf = all_logp.reshape(-1)
+            rew_buf = all_rew.reshape(-1)
 
-            # log rewards
-            print(f"Total reward: {sum(rew_buf)}")
-            print(f"Max reward per step: {jnp.max(rew_buf):.4f}")
-            print(f"Min reward per step: {jnp.min(rew_buf):.4f}")
-            print(f"Final x position: {obs_buf[-1][0]:.4f}")
-            print("Average reward per step:", sum(rew_buf) / len(rew_buf))
+            # Old bootstrap value
+            # _, last_val = model.apply(params, obs_buf[-1])
+            # val_buf = jnp.append(val_buf, last_val)
 
-            advantages = compute_gae(rew_buf, val_buf, jnp.zeros(len(rew_buf)))
+            # Per trajectory bootstrappen
+            _, last_vals = jax.vmap(lambda o: model.apply(params, o[-1]))(all_obs)
+            val_bufs = jax.vmap(lambda v, lv: jnp.append(v, lv))(all_val, last_vals)
 
-            returns = advantages + jnp.array(val_buf[:-1])
+            # GAE per trajectory
+            advantages_list = [
+                compute_gae(r, v, jnp.zeros(len(r))) for r, v in zip(all_rew, val_bufs)
+            ]
+            returns_list = [adv + v[:-1] for adv, v in zip(advantages_list, val_bufs)]
+
+            # Normalize advantages
+            advantages_normalized = [
+                (adv - jnp.mean(adv)) / (jnp.std(adv) + 1e-8) for adv in advantages_list
+            ]
+
+            advantages = jnp.concatenate(advantages_normalized)
+            returns = jnp.concatenate(returns_list)
+
+            # log metrics
+            print(f"Total reward: {jnp.sum(rew_buf)}")
+            print(f"Avg_reward: {jnp.sum(rew_buf) / len(arm_angles)}")
+            print(f"Max reward: {jnp.max(jnp.sum(all_rew, axis=1)):.4f}")
+            print(f"Min reward: {jnp.min(jnp.sum(all_rew, axis=1)):.4f}")
+            print("Average reward per step:", jnp.sum(rew_buf) / len(rew_buf))
             print("Average advantage:", jnp.mean(advantages))
             print("Average return:", jnp.mean(returns))
-            advantages = (advantages - jnp.mean(advantages)) / (
-                jnp.std(advantages) + 1e-8
-            )  # then normalize
 
             batch = (
                 jnp.array(obs_buf),
@@ -274,10 +277,10 @@ class NNControllerMulti(Controller):
 
             logger.log(
                 {
-                    "total_reward": sum(rew_buf),
-                    "average_reward": sum(rew_buf) / len(rew_buf),
+                    "total_reward": jnp.sum(rew_buf),
+                    "average_reward": jnp.sum(rew_buf) / len(arm_angles),
+                    "average_reward_per_step": jnp.sum(rew_buf) / len(rew_buf),
                     "average_advantage": jnp.mean(advantages),
-                    "stdev_advantage": jnp.std(advantages),
                     "average_return": jnp.mean(returns),
                     "loss": loss,
                 },
