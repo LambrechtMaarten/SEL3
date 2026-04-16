@@ -26,7 +26,7 @@ def render_saved_controller(controller_path: str):
         SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
         SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
         SubConfigurationMap.get_configuration(GeneticConfiguration, "crossover"),
-        SubConfigurationMap.get_configuration(ControllerConfiguration, "network_multi"),
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
     )
 
     configuration.logger.init_logger()

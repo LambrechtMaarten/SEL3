@@ -76,7 +76,7 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
             SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "network_multi"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
         )
 
         controller = configuration.controller.controller
