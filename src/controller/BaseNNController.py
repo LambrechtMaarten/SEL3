@@ -219,7 +219,7 @@ class BaseNNController(Controller, ABC):
                 cpg_state, env_state, prev_arm, rng = carry
                 rng, subkey = jax.random.split(rng)
 
-                x = self.build_obs_angle(env_state, angle)
+                x = self.build_obs_angle(env_state, angle - env_state.observations["disk_rotation"][2])
                 dist, value = model.apply(params, x)
 
                 action = dist.sample(seed=subkey)

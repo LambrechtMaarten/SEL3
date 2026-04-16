@@ -47,7 +47,7 @@ class NNControllerTarget(BaseNNController):
 
         rot = obs["disk_rotation"][2]
 
-        x = self.build_obs_angle(env_state, angle)
+        x = self.build_obs_angle(env_state, angle - rot)
 
         dist, value = self.model.apply(self.params, x)
 
