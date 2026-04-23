@@ -33,7 +33,7 @@ if __name__ == "__main__":
         configuration = Configuration(
             SubConfigurationMap.get_configuration(Logger, "standard"),
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
             SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
             SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
