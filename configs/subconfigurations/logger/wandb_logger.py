@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import numpy as np
 import wandb
-from configs.subcontrollers.logger.logger import Logger
+from configs.subconfigurations.logger.logger import Logger
 from src.jax_extra.jax_extra import jarr
 from src.render.render import save_video
 

@@ -2,12 +2,12 @@ from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from configs.subcontrollers.logger.logger import Logger
-    from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
-    from configs.subcontrollers.random.random_configurations import RandomConfiguration
-    from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
-    from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
-    from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
+    from configs.subconfigurations.logger.logger import Logger
+    from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
+    from configs.subconfigurations.random.random_configurations import RandomConfiguration
+    from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
+    from configs.subconfigurations.controller.controller_configurations import ControllerConfiguration
+    from configs.subconfigurations.simulation.simulation_configurations import SimulationConfiguration
 
 
 @dataclass

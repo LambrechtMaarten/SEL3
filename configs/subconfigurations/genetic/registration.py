@@ -1,5 +1,5 @@
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
+from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
 from src.genetic_optimization.basic_genetic_optimizer import BasicGeneticOptimizer
 from src.genetic_optimization.crossover_genetic_optimizer import (
     CrossoverGeneticOptimizer,

@@ -4,7 +4,7 @@ from typing import Callable
 from moojoco.environment.base import BaseEnvState
 
 from configs.config import Configuration
-from configs.subcontrollers.logger.logger import Logger
+from configs.subconfigurations.logger.logger import Logger
 from src.controller.control_input import ControlInput
 from src.cpg.cpg_state import CPGState
 from src.jax_extra.jax_extra import jarr

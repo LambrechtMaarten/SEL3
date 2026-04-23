@@ -4,15 +4,15 @@ import jax.numpy as jnp
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.controller.controller_configurations import (
+from configs.subconfigurations.controller.controller_configurations import (
     ControllerConfiguration,
 )
-from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
-from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
-from configs.subcontrollers.logger.logger import Logger
-from configs.subcontrollers.random.random_configurations import RandomConfiguration
-from configs.subcontrollers.register import register
-from configs.subcontrollers.simulation.simulation_configurations import (
+from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
+from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
+from configs.subconfigurations.logger.logger import Logger
+from configs.subconfigurations.random.random_configurations import RandomConfiguration
+from configs.subconfigurations.register import register
+from configs.subconfigurations.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
 from src.controller.network_controller import NetworkController
@@ -35,8 +35,8 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "map elites"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
         )
         train_controller(configuration)
 

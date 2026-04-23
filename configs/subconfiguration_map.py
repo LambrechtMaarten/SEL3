@@ -2,11 +2,11 @@ import json
 from typing import Dict, TypeVar
 
 from configs.subconfiguration import SubConfiguration
-from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
-from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
-from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
-from configs.subcontrollers.random.random_configurations import RandomConfiguration
-from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
+from configs.subconfigurations.controller.controller_configurations import ControllerConfiguration
+from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
+from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
+from configs.subconfigurations.random.random_configurations import RandomConfiguration
+from configs.subconfigurations.simulation.simulation_configurations import SimulationConfiguration
 
 T = TypeVar("T", bound=SubConfiguration)
 

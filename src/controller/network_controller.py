@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from configs.config import Configuration
-from configs.subcontrollers.logger.logger import Logger
+from configs.subconfigurations.logger.logger import Logger
 from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState

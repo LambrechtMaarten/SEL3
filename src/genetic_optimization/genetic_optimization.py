@@ -4,7 +4,7 @@ from typing import Any, Callable, Tuple
 import jax
 import jax.numpy as jnp
 
-from configs.subcontrollers.logger.logger import Logger
+from configs.subconfigurations.logger.logger import Logger
 from src.jax_extra.jax_extra import jarr
 
 evaluator_t = Callable[[jarr], jarr]

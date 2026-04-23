@@ -1,4 +1,4 @@
-from configs.subcontrollers.logger.logger import Logger
+from configs.subconfigurations.logger.logger import Logger
 from src.jax_extra.jax_extra import jarr
 
 

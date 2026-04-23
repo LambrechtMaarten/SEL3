@@ -2,15 +2,15 @@ import os
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.controller.controller_configurations import (
+from configs.subconfigurations.controller.controller_configurations import (
     ControllerConfiguration,
 )
-from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
-from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
-from configs.subcontrollers.logger.logger import Logger
-from configs.subcontrollers.random.random_configurations import RandomConfiguration
-from configs.subcontrollers.register import register
-from configs.subcontrollers.simulation.simulation_configurations import (
+from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
+from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
+from configs.subconfigurations.logger.logger import Logger
+from configs.subconfigurations.random.random_configurations import RandomConfiguration
+from configs.subconfigurations.register import register
+from configs.subconfigurations.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
 from src.controller.control_input import ControlInput

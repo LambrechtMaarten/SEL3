@@ -1,5 +1,5 @@
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.controller.controller_configurations import (
+from configs.subconfigurations.controller.controller_configurations import (
     ControllerConfiguration,
 )
 from src.controller.network_controller import NetworkController
