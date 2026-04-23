@@ -35,8 +35,8 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "map elites"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
         )
         train_controller(configuration)
 
@@ -50,8 +50,8 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "network"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
         )
 
         # Laad de getrainde CPG-parameters voor RIGHT

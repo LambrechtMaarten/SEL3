@@ -79,14 +79,14 @@ def train_controller(configuration: Configuration):
         frames = []
         while not (env_state.terminated | env_state.truncated):
             cpg_state = controller.act(
-                cpg_state, ControlInput.LEFT, configuration
+                cpg_state, ControlInput.LEFT, configuration, env_state
             )
             cpg_state = cpg.step(cpg_state)
             actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
             env_state = env.step(actions, env_state)
             frames.append(env.render(env_state))
 
-        configuration.logger.log_video(frames, "video")
+        configuration.logger.log_video(frames, "video.mp4")
 
     end = time.time()
-    configuration.logger.log({"time": str(end - start)})
+    configuration.logger.log(str(end - start))

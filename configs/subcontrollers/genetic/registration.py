@@ -35,6 +35,11 @@ def register():
 
     SubConfigurationMap.add_configuration(
         GeneticConfiguration,
+        GeneticConfiguration("map elites", 200, 20, RandomNormalGeneticOptimizer()),
+    )
+
+    SubConfigurationMap.add_configuration(
+        GeneticConfiguration,
         GeneticConfiguration("long", 100, 10, RandomNormalGeneticOptimizer()),
     )
 

@@ -1,5 +1,4 @@
-import math
-from typing import Callable
+from typing import Callable, Any
 
 import jax
 from jax import numpy as jnp
@@ -14,7 +13,7 @@ from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
 
 
-class OneDirectionController(Controller):
+class OneDirectionMapElitesController(Controller):
     """
     This controller sets a cpg for the entire body when it gets input, trying to get as far away from (0,0) as possible.
     """
@@ -30,24 +29,7 @@ class OneDirectionController(Controller):
         env_state: BaseEnvState,
     ):
         cpg_generator = configuration.cpg.cpg_generator
-        if control_input == ControlInput.ZZZ:
-            return cpg_generator.modulate_body(
-                cpg_state,
-                cpg_generator.body_to_jarr(
-                    cpg_generator.generate(configuration).reset()
-                ),
-            )
-
-        rotation = env_state.observations["disk_rotation"][2]
-        wanted_direction = control_input.value
-        rotated_direction = (
-            (wanted_direction - rotation) % (2 * math.pi) + (2 * math.pi)
-        ) % (2 * math.pi)
-        index = int(rotated_direction / (2 * math.pi) * 5)
-        print(rotation, wanted_direction, rotated_direction, index)
-        return cpg_generator.modulate_symmetric_rotation(
-            cpg_generator.modulate_body(cpg_state, self.body_cpg), index
-        )
+        return cpg_generator.modulate_body(cpg_state, self.body_cpg)
 
     def train_controller(
         self,
@@ -62,18 +44,16 @@ class OneDirectionController(Controller):
         def evaluator(arr: jarr) -> jarr:
             env = Environment(configuration)
 
-            def _evaluator(_arr: jarr, _rng: jarr) -> jarr | float:
+            def _evaluator(_arr: jarr, _rng: jarr) -> tuple[Any, Any]:
                 env_state = env.reset(_rng)
                 cpg_generator = configuration.cpg.cpg_generator
                 cpg = cpg_generator.generate(configuration)
                 cpg_state = cpg_generator.modulate_body(cpg.reset(), _arr)
 
-                score = 0.0
-
                 max_steps = 800
 
-                def step_fn(i, val):
-                    cpg_state, env_state, score = val
+                def step_fn(_, val):
+                    cpg_state, env_state = val
                     cpg_state = cpg.step(cpg_state)
                     env_state = env.step(
                         cpg_generator.outputs_to_actions(
@@ -81,26 +61,24 @@ class OneDirectionController(Controller):
                         ),
                         env_state,
                     )
-                    delta_x = env_state.observations["disk_position"][0]
-                    # Penalty for movement in wrong direction
-                    side_penalty = 0.3 * jnp.abs(
-                        env_state.observations["disk_position"][1]
-                    )
-                    rotation_penalty = 0.1 * jnp.abs(
-                        env_state.observations["disk_rotation"][0]
-                    )
-                    score = score + delta_x - side_penalty - rotation_penalty
+                    return cpg_state, env_state
 
-                    return cpg_state, env_state, score
-
-                cpg_state, env_state, score = jax.lax.fori_loop(
-                    0, max_steps, step_fn, (cpg_state, env_state, score)
+                cpg_state, env_state = jax.lax.fori_loop(
+                    0, max_steps, step_fn, (cpg_state, env_state)
                 )
-                return score
+                return env_state.observations["disk_position"][0], env_state.observations["disk_position"][1]
 
             new_rngs = jax.random.split(rng, len(arr))
-            scores = jax.vmap(_evaluator)(arr, new_rngs)
-            return scores
+            x_poss, y_poss = jax.vmap(_evaluator)(arr, new_rngs)
+            scores = x_poss - y_poss / 2
+
+            groups = jnp.floor(x_poss * 10).astype(int)
+            max_scores = jnp.max(jnp.where(groups[:, None] == groups[None, :], scores, -jnp.inf), axis=1)
+            rescaled_scores = scores / max_scores
+
+            jax.debug.log("{x}", x=scores)
+            jax.debug.log("{x}", x=rescaled_scores)
+            return rescaled_scores
 
         return evaluator
 
