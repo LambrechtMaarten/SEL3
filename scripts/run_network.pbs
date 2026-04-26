@@ -24,4 +24,4 @@ echo "Starting main.py"
 
 export HEADLESS=True
 
-PYTHONPATH=. python -u src/main.py train_network scripts/controller
+PYTHONPATH=. python -u src/main.py train_network_pretrain scripts/controller

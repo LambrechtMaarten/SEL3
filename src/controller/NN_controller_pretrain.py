@@ -83,7 +83,7 @@ value_warmup_jit = jax.jit(value_warmup_step, static_argnames=["model", "optimiz
 
 class NNControllerPretrain(BaseNNController):
     def __init__(self):
-        super().__init__(1 + 10)
+        super().__init__(30)  # 5 armen × 3 segmenten × 2 assen
         self.pretrained_params = None
         # KL-annealing: start bij 0.1, halveert elke ~35 iteraties
         self.kl_coef_init = jnp.array(0.1)
@@ -124,19 +124,19 @@ class NNControllerPretrain(BaseNNController):
 
     def _make_expert_rollout_fn(self, env, cpg_generator, cpg, configuration, num_steps):
         """Rollout waarbij de expert-CPG de robot bestuurt.
-        Verzamelt observaties zodat we die kunnen gebruiken voor BC."""
+        Verzamelt observaties én de bijhorende joint actions voor BC."""
         def expert_rollout(rng, expert_cpg_state, angle):
             def scan_step(carry, _):
                 cpg_state, env_state = carry
                 obs = self.build_obs_angle(env_state, angle)
                 cpg_state = cpg.step(cpg_state)
-                actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
-                env_state = env.step(actions, env_state)
-                return (cpg_state, env_state), obs
+                joint_actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
+                env_state = env.step(joint_actions, env_state)
+                return (cpg_state, env_state), (obs, joint_actions)
 
             init = (expert_cpg_state, env.reset(rng))
-            (_, _), obs_seq = jax.lax.scan(scan_step, init, None, length=num_steps)
-            return obs_seq  # (num_steps, obs_dim)
+            (_, _), (obs_seq, action_seq) = jax.lax.scan(scan_step, init, None, length=num_steps)
+            return obs_seq, action_seq  # (num_steps, obs_dim), (num_steps, 30)
 
         return jax.jit(expert_rollout)
 
@@ -183,11 +183,6 @@ class NNControllerPretrain(BaseNNController):
             cpg_generator.modulate_symmetric_rotation(expert_cpg_right, k)
             for k in range(5)
         ]
-        # Expert acties: [frequency, amplitude_goals] per richting  (5, action_dim)
-        expert_actions = jnp.stack([
-            jnp.concatenate([jnp.atleast_1d(s.frequency), s.amplitude_goals])
-            for s in expert_cpg_states
-        ])
 
         expert_rollout_fn = self._make_expert_rollout_fn(
             env, cpg_generator, cpg, configuration, num_rollout_steps
@@ -201,16 +196,16 @@ class NNControllerPretrain(BaseNNController):
         for iteration in range(bc_iterations):
             rng, *keys = jax.random.split(rng, 7)
 
-            # Observaties verzamelen voor alle 5 richtingen
-            obs_per_dir = [
+            # Observaties én joint actions verzamelen voor alle 5 richtingen
+            rollouts = [
                 expert_rollout_fn(keys[k], expert_cpg_states[k], arm_angles[k])
                 for k in range(5)
             ]
-            obs_batch = jnp.concatenate(obs_per_dir)  # (5*num_rollout_steps, obs_dim)
+            obs_batch = jnp.concatenate([r[0] for r in rollouts])       # (5*num_rollout_steps, obs_dim)
+            expert_targets = jnp.concatenate([r[1] for r in rollouts])  # (5*num_rollout_steps, 30)
 
-            # Expert-acties herhalen per stap, kleine ruis toevoegen
+            # Kleine ruis toevoegen voor generalisatie
             rng, noise_key = jax.random.split(rng)
-            expert_targets = jnp.repeat(expert_actions, num_rollout_steps, axis=0)
             expert_targets = expert_targets + jax.random.normal(noise_key, expert_targets.shape) * noise_std
 
             self.params, bc_opt_state, loss = bc_update_jit(
@@ -222,7 +217,7 @@ class NNControllerPretrain(BaseNNController):
 
         # --- Fase 2: Value warm-up ---
         print("=== Fase 2: Value warm-up ===")
-        rollout_fn = self._make_rollout_fn(env, cpg_generator, self.model, configuration, num_rollout_steps)
+        rollout_fn = self._make_rollout_fn(env, self.model, configuration, num_rollout_steps)
         warmup_optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
         warmup_opt_state = warmup_optimizer.init(self.params)
 
@@ -260,38 +255,22 @@ class NNControllerPretrain(BaseNNController):
         return self.params
 
     def act(self, cpg_state, control_input, configuration, env_state):
-        STOP_THRESHOLD = 0.05 
-        
+        STOP_THRESHOLD = 0.05
+
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
         deltas = jnp.array(control_input) - robot_pos
         distance = jnp.linalg.norm(deltas)
 
-        # Target reached
+        # Doel bereikt: geen beweging
         if distance < STOP_THRESHOLD:
-            cpg_generator = configuration.cpg.cpg_generator
-
-            return cpg_generator.modulate_body(
-                cpg_state,
-                cpg_generator.body_to_jarr(
-                    cpg_generator.generate(configuration).reset()
-                ),
-            )
-        cpg_generator = configuration.cpg.cpg_generator
-        
+            return jnp.zeros(30)
 
         angle = jnp.arctan2(deltas[1], deltas[0])
-        
-        print(f"Going towards: {jnp.degrees(angle)}°")
-        print("POSITION: ", robot_pos)
-
         rot = obs["disk_rotation"][2]
 
         x = self.build_obs_angle(env_state, angle - rot)
+        dist, _ = self.model.apply(self.params, x)
 
-        dist, value = self.model.apply(self.params, x)
-
-        action = dist.mode()
-        leading_arm_index = self.angle_to_arm_relative(angle, rot)
-        full_body = self.network_output_to_body(action, cpg_state, leading_arm_index)
-        return cpg_generator.modulate_body(cpg_state, full_body)
+        # Directe joint actions — geen CPG tussenstap
+        return dist.mode()

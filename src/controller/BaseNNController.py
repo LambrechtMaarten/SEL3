@@ -79,9 +79,9 @@ class BaseNNController(Controller, ABC):
         angle_enc = jnp.array([jnp.sin(angle), jnp.cos(angle)])
         return jnp.concatenate(
             [
-                # obs["disk_position"][0:2],
                 jnp.array([obs["disk_rotation"][2]]),
                 angle_enc,
+                obs["joint_position"],  # huidige gewrichtshoeken (30D)
             ]
         )
 
@@ -134,19 +134,18 @@ class BaseNNController(Controller, ABC):
         rng = configuration.random.rng
 
         env = Environment(configuration)
-        cpg_generator = configuration.cpg.cpg_generator
-        cpg = cpg_generator.generate(configuration)
 
         dummy_env = env.reset(rng)
         dummy_input = self.build_obs_angle(dummy_env, 0.0)
-        params = self.model.init(rng, dummy_input)
-        self.params = params
+        if self.params is None:
+            params = self.model.init(rng, dummy_input)
+            self.params = params
+        else:
+            params = self.params  # gebruik pretrained params als startpunt
 
         opt_state = self.optimizer.init(params)
 
-        rollout_fn = self._make_rollout_fn(
-            env, cpg_generator, self.model, configuration, num_steps
-        )
+        rollout_fn = self._make_rollout_fn(env, self.model, configuration, num_steps)
 
         def rollout_many(rng, params, angles):
             keys = jax.random.split(rng, len(angles))
@@ -223,11 +222,11 @@ class BaseNNController(Controller, ABC):
         print(f"Iter {iteration}, loss {loss}")
         return params, opt_state
     
-    def _make_rollout_fn(self, env, cpg_generator, model, configuration, num_steps):
+    def _make_rollout_fn(self, env, model, configuration, num_steps):
         def rollout_fn(rng, params, angle):
 
             def scan_step(carry, _):
-                cpg_state, env_state, prev_arm, rng = carry
+                env_state, rng = carry
                 rng, subkey = jax.random.split(rng)
 
                 x = self.build_obs_angle(env_state, angle - env_state.observations["disk_rotation"][2])
@@ -239,41 +238,18 @@ class BaseNNController(Controller, ABC):
                 prev_pos = env_state.observations["disk_position"]
                 prev_rot = env_state.observations["disk_rotation"][2]
 
-                leading_arm_index = self.angle_to_arm_relative(
-                    angle,
-                    env_state.observations["disk_rotation"][2]
-                )
-
-                full_body = self.network_output_to_body(
-                    action, cpg_state, leading_arm_index
-                )
-
-                cpg_state = cpg_generator.modulate_body(cpg_state, full_body)
-                cpg_state = cpg_generator.generate(configuration).step(cpg_state)
-
-                env_state = env.step(
-                    cpg_generator.outputs_to_actions(
-                        cpg_state.outputs, configuration
-                    ),
-                    env_state,
-                )
+                # Netwerk output zijn directe joint actions — geen CPG tussenstap
+                env_state = env.step(action, env_state)
 
                 curr_pos = env_state.observations["disk_position"]
                 curr_rot = env_state.observations["disk_rotation"][2]
-                reward = self.angle_reward(prev_pos, curr_pos, prev_rot, curr_rot, angle) # - arm_switch_penalty
+                reward = self.angle_reward(prev_pos, curr_pos, prev_rot, curr_rot, angle)
 
-                return (cpg_state, env_state, leading_arm_index, rng), (
-                    x, action, log_prob, value, reward
-                )
+                return (env_state, rng), (x, action, log_prob, value, reward)
 
-            init = (
-                cpg_generator.generate(configuration).reset(),
-                env.reset(rng),
-                self.angle_to_arm_relative(angle, 0.0),
-                rng,
-            )
+            init = (env.reset(rng), rng)
 
-            (_, _, _, _), traj = jax.lax.scan(scan_step, init, None, length=num_steps)
+            (_, _), traj = jax.lax.scan(scan_step, init, None, length=num_steps)
             return traj
 
         return jax.jit(rollout_fn)

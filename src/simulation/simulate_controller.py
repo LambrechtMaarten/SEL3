@@ -26,17 +26,13 @@ def simulate_controller(output_path: str):
         SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
         SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
         SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-        SubConfigurationMap.get_configuration(ControllerConfiguration, "network"),
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
     )
     env = Environment(configuration)
-    cpg_generator = configuration.cpg.cpg_generator
-    # Initialiseer het netwerk voor read_controller
     configuration.controller.controller.read_controller(
         os.path.join(output_path, "controller")
     )
-    cpg = cpg_generator.generate(configuration)
     env_state = env.reset(configuration.random.split())
-    cpg_state = cpg.reset()
 
     while True:
         key = -1
@@ -56,11 +52,10 @@ def simulate_controller(output_path: str):
             ord("d"): ControlInput.RIGHT,
         }.get(key, ControlInput.WAIT)
 
-        cpg_state = configuration.controller.controller.act(
-            cpg_state, control_input, configuration, env_state
+        # act geeft directe joint actions terug — geen CPG tussenstap
+        actions = configuration.controller.controller.act(
+            None, control_input, configuration, env_state
         )
-        cpg_state = cpg.step(cpg_state)
-        actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
         env_state = env.step(actions, env_state)
         frame = env.render(env_state)
 
