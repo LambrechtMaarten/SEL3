@@ -32,7 +32,7 @@ class Logger(SubConfiguration):
         pass
 
     @abstractmethod
-    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr):
+    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int):
         pass
 
     @abstractmethod
@@ -40,5 +40,5 @@ class Logger(SubConfiguration):
         pass
 
     @abstractmethod
-    def log(self, logging: str):
+    def log(self, name: str, logging: str):
         pass

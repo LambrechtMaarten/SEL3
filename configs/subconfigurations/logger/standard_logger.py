@@ -32,9 +32,7 @@ class StandardLogger(Logger):
         with open(os.path.join(self.base_folder, "configuration.json"), "w") as f:
             f.write(json_str)
 
-    def log_genetic_generation(
-        self, population: jarr, selections: jarr, evaluations: jarr
-    ):
+    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int, **kwargs):
         path = Path(os.path.join(self.base_folder, "genetic"))
         if not os.path.exists(path):
             path.touch()
@@ -53,11 +51,13 @@ class StandardLogger(Logger):
     def log_video(self, frames, name):
         save_video(frames, str(os.path.join(self.base_folder, name)))
 
-    def log(self, logging: str):
+    def log(self, name: str, logging: str):
         path = Path(os.path.join(self.base_folder, "log"))
         if not os.path.exists(path):
             path.touch()
         with open(path, "a") as f:
-            f.write(f"[{datetime.datetime.now().strftime('%H:%M:%S')}]")
+            f.write(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ")
+            f.write(name)
+            f.write(": ")
             f.write(logging)
             f.write("\n")

@@ -89,4 +89,4 @@ def train_controller(configuration: Configuration):
         configuration.logger.log_video(frames, "video.mp4")
 
     end = time.time()
-    configuration.logger.log(str(end - start))
+    configuration.logger.log("time", str(end - start))

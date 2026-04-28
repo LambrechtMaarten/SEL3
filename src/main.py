@@ -1,5 +1,6 @@
 import sys
 
+import jax.debug
 import jax.numpy as jnp
 
 from configs.config import Configuration
@@ -18,6 +19,7 @@ from configs.subconfigurations.simulation.simulation_configurations import (
 from src.controller.network_controller import NetworkController
 from src.render.render_video import render_saved_controller
 from src.simulation.simulate_controller import simulate_controller
+from src.training.train_archive import train_archive
 from src.training.train_controller import train_controller
 
 if __name__ == "__main__":
@@ -31,7 +33,7 @@ if __name__ == "__main__":
 
     if sys.argv[1] == "train":
         configuration = Configuration(
-            SubConfigurationMap.get_configuration(Logger, "standard"),
+            SubConfigurationMap.get_configuration(Logger, "wandb"),
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
@@ -39,6 +41,19 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
         )
         train_controller(configuration)
+
+    if sys.argv[1] == "map-elites":
+        configuration = Configuration(
+            SubConfigurationMap.get_configuration(Logger, "standard"),
+            SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
+            SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
+        )
+        groups, edges = train_archive(configuration)
+        jax.debug.log("{x}",x=edges)
+        jax.debug.log("{x}",x=groups)
 
     elif sys.argv[1] == "train_network":
         if len(sys.argv) < 3:
@@ -50,8 +65,8 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "map elites"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
         )
 
         # Laad de getrainde CPG-parameters voor RIGHT

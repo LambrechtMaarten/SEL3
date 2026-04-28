@@ -17,11 +17,11 @@ class SilentLogger(Logger):
     def log_configuration(self):
         pass
 
-    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr):
+    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int):
         pass
 
     def log_video(self, frames, name):
         pass
 
-    def log(self, logging: str):
+    def log(self, name: str, logging: str):
         pass
