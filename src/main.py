@@ -48,7 +48,7 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "map elites"),
             SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
         )
         groups, edges = train_archive(configuration)
