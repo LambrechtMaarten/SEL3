@@ -82,6 +82,7 @@ class BaseNNController(Controller, ABC):
                 jnp.array([obs["disk_rotation"][2]]),
                 angle_enc,
                 obs["joint_position"],  # huidige gewrichtshoeken (30D)
+                obs["joint_velocity"],  # gewrichtssnelheden voor fase-info (30D)
             ]
         )
 
