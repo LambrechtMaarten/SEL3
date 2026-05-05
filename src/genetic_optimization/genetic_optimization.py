@@ -44,7 +44,9 @@ class GeneticOptimizer(ABC):
             t_start = time.time()
             rng, _rng, __rng = jax.random.split(rng, 3)
             if i != 0:
+                print(f"Generatie {i + 1:3d}/{iterations} | reproduceren...", flush=True)
                 population, state = self.reproduce(selections, evaluations, _rng, state)
+            print(f"Generatie {i + 1:3d}/{iterations} | evalueren ({len(population)} genomes)...", flush=True)
             evaluations = evaluator(population)
             selections, state = self.select(population, evaluations, __rng, state)
             logger.log_genetic_generation(population, selections, evaluations, i)
@@ -56,7 +58,8 @@ class GeneticOptimizer(ABC):
                 f"Generatie {i + 1:3d}/{iterations} | "
                 f"best: {float(jnp.max(scores)):.4f} | "
                 f"gem: {float(jnp.mean(scores)):.4f} | "
-                f"tijd: {elapsed:.1f}s"
+                f"tijd: {elapsed:.1f}s",
+                flush=True
             )
 
         return selections, evaluations
