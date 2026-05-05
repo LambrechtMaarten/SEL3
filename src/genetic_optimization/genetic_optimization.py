@@ -1,3 +1,4 @@
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Tuple
 
@@ -40,11 +41,22 @@ class GeneticOptimizer(ABC):
         state = None
 
         for i in range(iterations):
+            t_start = time.time()
             rng, _rng, __rng = jax.random.split(rng, 3)
             if i != 0:
                 population, state = self.reproduce(selections, evaluations, _rng, state)
             evaluations = evaluator(population)
             selections, state = self.select(population, evaluations, __rng, state)
             logger.log_genetic_generation(population, selections, evaluations, i)
+
+            # Voortgangsoutput naar terminal
+            scores = evaluations[1] if isinstance(evaluations, tuple) else evaluations
+            elapsed = time.time() - t_start
+            print(
+                f"Generatie {i + 1:3d}/{iterations} | "
+                f"best: {float(jnp.max(scores)):.4f} | "
+                f"gem: {float(jnp.mean(scores)):.4f} | "
+                f"tijd: {elapsed:.1f}s"
+            )
 
         return selections, evaluations
