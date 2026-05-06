@@ -70,13 +70,14 @@ class WandbLogger(Logger):
         wandb.log({name: logging})
 
     def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int):
+        scores = evaluations[1] if isinstance(evaluations, tuple) else evaluations
         metrics = {
             "generation": generation,
-            "population/size": int(len(evaluations)),
-            "fitness/best": float(jnp.max(evaluations)),
-            "fitness/mean": float(jnp.mean(evaluations)),
-            "fitness/min": float(jnp.min(evaluations)),
-            "fitness/std": float(jnp.std(evaluations)),
+            "population/size": int(len(scores)),
+            "fitness/best": float(jnp.max(scores)),
+            "fitness/mean": float(jnp.mean(scores)),
+            "fitness/min": float(jnp.min(scores)),
+            "fitness/std": float(jnp.std(scores)),
         }
 
         wandb.log(metrics)

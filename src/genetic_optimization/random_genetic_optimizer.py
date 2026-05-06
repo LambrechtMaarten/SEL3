@@ -9,7 +9,8 @@ from src.jax_extra.jax_extra import jarr
 
 class RandomNormalGeneticOptimizer(GeneticOptimizer):
     def select(self, population: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
-        return population[jnp.argsort(evaluations)[-jnp.size(population, 0) // 2 :]], None
+        scores = evaluations[0] if isinstance(evaluations, tuple) else evaluations
+        return population[jnp.argsort(scores)[-jnp.size(population, 0) // 2 :]], None
 
     def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         rng1, rng2 = jax.random.split(rng)

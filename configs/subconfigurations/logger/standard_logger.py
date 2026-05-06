@@ -36,6 +36,7 @@ class StandardLogger(Logger):
         path = Path(os.path.join(self.base_folder, "genetic"))
         if not os.path.exists(path):
             path.touch()
+        scores = evaluations[1] if isinstance(evaluations, tuple) else evaluations
         with open(path, "a") as f:
             jnp.set_printoptions(threshold=(jnp.inf))
             # noinspection PyTypeChecker
@@ -45,7 +46,7 @@ class StandardLogger(Logger):
             f.write(jnp.array_str(selections))
             f.write("\n")
             # noinspection PyTypeChecker
-            f.write(jnp.array_str(evaluations))
+            f.write(jnp.array_str(scores))
             f.write("\n")
 
     def log_video(self, frames, name):
