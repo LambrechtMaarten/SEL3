@@ -38,23 +38,21 @@ def train_archive(configuration: Configuration):
 
     controller: OneDirectionMapElitesController = configuration.controller.controller
     get_edges = jax.jit(controller.get_edges(configuration, configuration.random.split()))
-    return get_edges(selections)
+    x_positions, groups, edges = get_edges(selections)
 
-    # controller.train_controller(selections, evaluations, configuration)
-    # env = Environment(configuration)
-    # cpg_generator = configuration.cpg.cpg_generator
-    # cpg = cpg_generator.generate(configuration)
-    # env_state = env.reset(configuration.random.split())
-    # cpg_state = cpg.reset()
-    # frames = []
-    # while not (env_state.terminated | env_state.truncated):
-    #     cpg_state = controller.act(
-    #         cpg_state, ControlInput.LEFT, configuration, env_state
-    #     )
-    #     cpg_state = cpg.step(cpg_state)
-    #     actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
-    #     env_state = env.step(actions, env_state)
-    #     frames.append(env.render(env_state))
-    # configuration.logger.log_video(frames, "video.mp4")
+    for i in range(len(x_positions)):
+        env = Environment(configuration)
+        cpg_generator = configuration.cpg.cpg_generator
+        cpg = cpg_generator.generate(configuration)
+        env_state = env.reset(configuration.random.split())
+        cpg_state = cpg.reset()
+        frames = []
+        while not (env_state.terminated | env_state.truncated):
+            cpg_state = configuration.cpg.cpg_generator.modulate_body(cpg_state, selections[i])
+            cpg_state = cpg.step(cpg_state)
+            actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
+            env_state = env.step(actions, env_state)
+            frames.append(env.render(env_state))
+        configuration.logger.log_video(frames, f'video_{groups[i]}.mp4')
 
 
