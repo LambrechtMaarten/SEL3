@@ -86,17 +86,18 @@ class CPGNetwork(nn.Module):
     state_dim: int
 
     @nn.compact
-    def __call__(self, direction_vec: jarr, state_vec: jarr) -> jarr:
+    def __call__(self, direction_vec: jarr, speed: jarr, state_vec: jarr) -> jarr:
         """Forward pass.
 
         Args:
             direction_vec: JAX array van vorm (2,) met [cos θ, sin θ].
+            speed: JAX array van vorm (1,) met genormaliseerde snelheid [0, 1].
             state_vec: JAX array van vorm (state_dim,) met de huidige state.
 
         Returns:
             JAX array van vorm (num_cpg_params,) met CPG-parameters.
         """
-        x = jnp.concatenate([direction_vec, state_vec], axis=-1)
+        x = jnp.concatenate([direction_vec, speed, state_vec], axis=-1)
         x = nn.Dense(128)(x)
         x = nn.tanh(x)
         x = nn.Dense(128)(x)
@@ -146,6 +147,7 @@ class NetworkController(Controller):
         self._template_params = self.network.init(
             jax.random.PRNGKey(0),
             jnp.zeros(2),
+            jnp.zeros(1),
             jnp.zeros(self._state_dim),
         )
 
@@ -164,6 +166,7 @@ class NetworkController(Controller):
         params = self.network.init(
             rng,
             jnp.zeros(2),
+            jnp.zeros(1),
             jnp.zeros(self._state_dim),
         )
         return params
@@ -172,14 +175,16 @@ class NetworkController(Controller):
         self,
         params: dict,
         theta: float,
+        speed: float,
         cpg_state: CPGState,
     ) -> jarr:
-        """Pure policy-call voor RL: (params, θ, CPG-state) → CPG-parameters.
+        """Pure policy-call voor RL: (params, θ, speed, CPG-state) → CPG-parameters.
 
-        Dit is de functie die je in je RL-loop gebruikt:
-            - direction θ wordt naar [cos θ, sin θ] omgezet;
-            - CPG-state wordt naar een state-vector geëxtraheerd;
-            - het netwerk produceert CPG-parameters.
+        Args:
+            params: netwerkparameters.
+            theta: gewenste bewegingsrichting in radialen.
+            speed: genormaliseerde snelheid [0, 1] (1 = maximale snelheid).
+            cpg_state: huidige CPG-toestand.
 
         De RL-omgeving kan daarna:
             - cpg_state = modulate_body(cpg_state, cpg_params)
@@ -188,8 +193,9 @@ class NetworkController(Controller):
         """
         assert self.network is not None
         direction_vec = angle_to_vector(theta)
+        speed_vec = jnp.array([speed])
         state_vec = extract_state_from_cpg(cpg_state)
-        return self.network.apply(params, direction_vec, state_vec)
+        return self.network.apply(params, direction_vec, speed_vec, state_vec)
 
     # ---------- Supervised pre-training (optioneel) ----------
 
@@ -217,8 +223,9 @@ class NetworkController(Controller):
         cpg_generator = configuration.cpg.cpg_generator
         cpg = cpg_generator.generate(configuration)
 
-        # Bouw training pairs voor de 5 natuurlijke richtingen
+        # Bouw training pairs voor de 5 natuurlijke richtingen (speed=1.0: max snelheid)
         training_pairs = []
+        speed_vec = jnp.ones(1)
         for i, theta in enumerate(NATURAL_DIRECTIONS):
             direction_vector = angle_to_vector(theta)
 
@@ -232,16 +239,14 @@ class NetworkController(Controller):
             )
             rotated_params = cpg_generator.body_to_jarr(rotated_state)
 
-            # Neutrale state-vector (kan later echte state worden)
             state_vec = jnp.zeros(self._state_dim)
-
-            training_pairs.append((direction_vector, state_vec, rotated_params))
+            training_pairs.append((direction_vector, speed_vec, state_vec, rotated_params))
             print(f"Richting {i} ({float(jnp.degrees(theta)):.1f}°): params klaar")
 
         def loss_fn(params):
             total_loss = 0.0
-            for direction_vector, state_vec, target_params in training_pairs:
-                output = self.network.apply(params, direction_vector, state_vec)
+            for direction_vector, speed_vec, state_vec, target_params in training_pairs:
+                output = self.network.apply(params, direction_vector, speed_vec, state_vec)
                 total_loss += jnp.mean((output - target_params) ** 2)
             return total_loss / len(training_pairs)
 
@@ -266,6 +271,115 @@ class NetworkController(Controller):
         self.weights = flatten_params(params)
         print("Pre-training voltooid!")
 
+    def pretrain_from_archive(
+        self,
+        archive_path: str,
+        configuration: Configuration,
+        min_displacement: float = 0.2,
+        learning_rate: float = 0.01,
+        steps: int = 1000,
+    ):
+        """Pre-traint het netwerk op alle gaits uit een map-elites archief.
+
+        Elke gait heeft een x-verplaatsing die de snelheid aangeeft en het
+        teken geeft de richting (positief = rechts, negatief = links).
+        Elke gait wordt geroteerd naar alle 5 richtingen, wat resulteert in
+        N × 5 trainingsparen met diverse (richting, snelheid) combinaties.
+
+        Args:
+            archive_path: pad naar de map met selections.npy en x_positions.npy.
+            configuration: trainings-configuratie.
+            min_displacement: minimale |x|-verplaatsing om een gait te gebruiken.
+            learning_rate: leersnelheid voor Adam.
+            steps: aantal BC-updateslagen.
+        """
+        import optax
+        from pathlib import Path
+
+        self._init_network(configuration)
+        assert self._state_dim is not None
+        assert self.network is not None
+
+        cpg_generator = configuration.cpg.cpg_generator
+        cpg = cpg_generator.generate(configuration)
+
+        # Laad archief
+        archive = Path(archive_path)
+        selections = np.load(archive / "selections.npy")    # (N, genome_size)
+        x_positions = np.load(archive / "x_positions.npy") # (N,)
+
+        # Filter gaits die nauwelijks bewegen (x ≈ 0 = richting onbekend)
+        mask = np.abs(x_positions) > min_displacement
+        filtered_selections = selections[mask]
+        filtered_x = x_positions[mask]
+
+        if len(filtered_selections) == 0:
+            raise ValueError(f"Geen gaits gevonden met |x_position| > {min_displacement}.")
+
+        # Normaliseer snelheid op basis van maximale absolute x-verplaatsing
+        max_abs_x = float(np.abs(filtered_x).max())
+        speeds_normalized = np.abs(filtered_x) / max_abs_x  # [0, 1]
+
+        # Basisrichting per gait: 0° voor rechts (x>0), π voor links (x<0)
+        base_rotations = np.where(filtered_x > 0, 0, len(NATURAL_DIRECTIONS) // 2)
+
+        print(f"Archief geladen: {len(selections)} gaits totaal, "
+              f"{len(filtered_selections)} gebruikt (|x| > {min_displacement}), "
+              f"snelheidsbereik=[{speeds_normalized.min():.2f}, {speeds_normalized.max():.2f}].")
+
+        # Bouw training pairs: elke gait × 5 richtingen, met eigen snelheid
+        training_pairs = []
+        for gait_params, speed, base_rot in zip(filtered_selections, speeds_normalized, base_rotations):
+            speed_vec = jnp.array([float(speed)])
+            cpg_state = cpg_generator.modulate_body(cpg.reset(), jnp.array(gait_params))
+
+            for i in range(len(NATURAL_DIRECTIONS)):
+                # Roteer relatief t.o.v. de basisrichting van de gait
+                k = (i + int(base_rot)) % len(NATURAL_DIRECTIONS)
+                theta = NATURAL_DIRECTIONS[i]
+                direction_vector = angle_to_vector(theta)
+
+                perm = jnp.roll(jnp.arange(10), shift=k * 2)
+                rotated_state = cpg_state.replace(
+                    amplitude_goals=cpg_state.amplitude_goals[perm],
+                    offset_goals=cpg_state.offset_goals[perm],
+                    coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
+                )
+                rotated_params = cpg_generator.body_to_jarr(rotated_state)
+                state_vec = jnp.zeros(self._state_dim)
+                training_pairs.append((direction_vector, speed_vec, state_vec, rotated_params))
+
+        print(f"{len(training_pairs)} trainingsparen aangemaakt "
+              f"({len(filtered_selections)} gaits × 5 richtingen).")
+
+        def loss_fn(params):
+            total_loss = 0.0
+            for direction_vector, speed_vec, state_vec, target_params in training_pairs:
+                output = self.network.apply(params, direction_vector, speed_vec, state_vec)
+                total_loss += jnp.mean((output - target_params) ** 2)
+            return total_loss / len(training_pairs)
+
+        optimizer = optax.adam(learning_rate)
+        params = self._template_params
+        opt_state = optimizer.init(params)
+
+        @jax.jit
+        def step(params, opt_state):
+            loss, grads = jax.value_and_grad(loss_fn)(params)
+            updates, new_opt_state = optimizer.update(grads, opt_state)
+            new_params = optax.apply_updates(params, updates)
+            return new_params, new_opt_state, loss
+
+        print(f"Start BC pre-training ({steps} stappen)...")
+        for i in range(steps):
+            params, opt_state, loss = step(params, opt_state)
+            if i % 100 == 0:
+                print(f"  Stap {i:4d}/{steps}: loss = {float(loss):.6f}", flush=True)
+
+        self._template_params = params
+        self.weights = flatten_params(params)
+        print("BC pre-training vanuit archief voltooid!")
+
     # ---------- Runtime-act voor manuele besturing ----------
 
     def act(
@@ -273,6 +387,7 @@ class NetworkController(Controller):
         cpg_state: CPGState,
         control_input: ControlInput,
         configuration: Configuration,
+        speed: float = 1.0,
     ) -> CPGState:
         """Moduleert de CPG-state met netwerkoutput voor de gegeven richting + state.
 
@@ -304,9 +419,10 @@ class NetworkController(Controller):
 
         theta = CONTROL_INPUT_TO_ANGLE.get(control_input, 0.0)
         direction_vector = angle_to_vector(theta)
+        speed_vec = jnp.array([speed])
         state_vec = extract_state_from_cpg(cpg_state)
 
-        cpg_params = self.network.apply(self.params, direction_vector, state_vec)
+        cpg_params = self.network.apply(self.params, direction_vector, speed_vec, state_vec)
         return cpg_generator.modulate_body(cpg_state, cpg_params)
 
     # ---------- Nutsfuncties ----------

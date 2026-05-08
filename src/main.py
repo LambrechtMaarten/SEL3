@@ -82,6 +82,30 @@ if __name__ == "__main__":
         controller = configuration.controller.controller
         controller.train_controller(configuration, pretrained_body_cpg=body_cpg)
 
+    elif sys.argv[1] == "train_network_archive":
+        # Gebruik: python -m src.main train_network_archive <pad/naar/archive/>
+        # Het archief bevat selections.npy en x_positions.npy van map-elites.
+        # Na pretraining wordt de controller opgeslagen voor evaluatie/render.
+        if len(sys.argv) < 3:
+            print("Geef het pad naar het map-elites archief mee als tweede argument.")
+            sys.exit(1)
+
+        configuration = Configuration(
+            SubConfigurationMap.get_configuration(Logger, "wandb"),
+            SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
+        )
+        configuration.logger.init_logger()
+
+        controller = configuration.controller.controller
+        controller.logger = configuration.logger
+        controller.pretrain_bc_from_archive(configuration, sys.argv[2])
+        controller.save_controller(configuration.logger)
+        print(f"Controller opgeslagen in: {configuration.logger.base_folder}")
+
     elif sys.argv[1] == "simulate":
         simulate_controller(sys.argv[2])
 

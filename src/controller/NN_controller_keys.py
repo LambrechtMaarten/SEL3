@@ -33,7 +33,7 @@ class NNControllerKeys(BaseNNController):
         angle = CONTROL_INPUT_TO_ANGLE[control_input]
         rot = obs["disk_rotation"][2]
 
-        x = self.build_obs_angle(env_state, angle - rot)
+        x = self.build_obs_angle(env_state, angle - rot, speed=1.0)
         dist, _ = self.model.apply(self.params, x)
 
         # Directe joint actions — geen CPG tussenstap

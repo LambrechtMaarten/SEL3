@@ -73,7 +73,7 @@ class BaseNNController(Controller, ABC):
 
         return jnp.dot(delta, direction) # - 0.02 *rotation_penalty
 
-    def build_obs_angle(self, env_state, angle):
+    def build_obs_angle(self, env_state, angle, speed=1.0):
         obs = env_state.observations
         # Encodeer hoek als sin/cos zodat 0° en 360° hetzelfde zijn
         angle_enc = jnp.array([jnp.sin(angle), jnp.cos(angle)])
@@ -81,8 +81,9 @@ class BaseNNController(Controller, ABC):
             [
                 jnp.array([obs["disk_rotation"][2]]),
                 angle_enc,
-                obs["joint_position"],  # huidige gewrichtshoeken (30D)
-                obs["joint_velocity"],  # gewrichtssnelheden voor fase-info (30D)
+                jnp.atleast_1d(jnp.asarray(speed, dtype=jnp.float32)),  # doelsnelheid (1D)
+                obs["joint_position"],   # huidige gewrichtshoeken (30D)
+                obs["joint_velocity"],   # gewrichtssnelheden voor fase-informatie (30D)
             ]
         )
 
@@ -148,17 +149,17 @@ class BaseNNController(Controller, ABC):
 
         rollout_fn = self._make_rollout_fn(env, self.model, configuration, num_steps)
 
-        def rollout_many(rng, params, angles):
+        def rollout_many(rng, params, angles, speeds):
             keys = jax.random.split(rng, len(angles))
-            return jax.vmap(rollout_fn, in_axes=(0, None, 0))(keys, params, angles)
-
+            return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0))(keys, params, angles, speeds)
 
         for iteration in range(100):
             print(f"Starting iteration {iteration}")
             rng, subkey, angle_key = jax.random.split(rng, 3)
             arm_angles = self.get_angles(angle_key)
+            speeds = jnp.ones(len(arm_angles))  # PPO traint bij volle snelheid
 
-            traj = rollout_many(subkey, params, arm_angles)
+            traj = rollout_many(subkey, params, arm_angles, speeds)
 
             all_obs, all_act, all_logp, all_val, all_rew = traj
 
@@ -224,13 +225,13 @@ class BaseNNController(Controller, ABC):
         return params, opt_state
     
     def _make_rollout_fn(self, env, model, configuration, num_steps):
-        def rollout_fn(rng, params, angle):
+        def rollout_fn(rng, params, angle, speed):
 
             def scan_step(carry, _):
                 env_state, rng = carry
                 rng, subkey = jax.random.split(rng)
 
-                x = self.build_obs_angle(env_state, angle - env_state.observations["disk_rotation"][2])
+                x = self.build_obs_angle(env_state, angle - env_state.observations["disk_rotation"][2], speed)
                 dist, value = model.apply(params, x)
 
                 action = dist.sample(seed=subkey)

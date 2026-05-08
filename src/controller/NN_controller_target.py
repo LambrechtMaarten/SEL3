@@ -36,7 +36,10 @@ class NNControllerTarget(BaseNNController):
         angle = wrap_angle(jnp.arctan2(deltas[1], deltas[0]))
         rot = obs["disk_rotation"][2]
 
-        x = self.build_obs_angle(env_state, angle - rot)
+        # Snelheid proportioneel aan afstand: robot vertraagt automatisch bij het doel
+        speed = jnp.clip(distance, 0.0, 1.0)
+
+        x = self.build_obs_angle(env_state, angle - rot, speed)
         dist, _ = self.model.apply(self.params, x)
 
         # Directe joint actions — geen CPG tussenstap
