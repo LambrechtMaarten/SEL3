@@ -6,12 +6,13 @@ import distrax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
 from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
-from src.cpg.cpg_generators.fully_connected_cpg_generator import FullyConnectedCPGGenerator
+from src.cpg.cpg_generators.fully_connected_symmetric_cpg_generator import FullyConnectedSymmetricCPGGenerator
 from src.environment.environment import Environment
 from src.controller.BaseNNController import BaseNNController
 
@@ -89,6 +90,7 @@ class NNControllerPretrain(BaseNNController):
         # KL-annealing: start bij 0.1, halveert elke ~35 iteraties
         self.kl_coef_init = jnp.array(0.1)
         self.kl_decay = jnp.array(50.0)
+        self.current_sector = 0
 
     def train_controller(self, configuration, num_steps=1000, pretrained_body_cpg=None):
         """Train de controller via PPO.
@@ -103,9 +105,12 @@ class NNControllerPretrain(BaseNNController):
         """
         # === Pretraining via Behavioral Cloning ===
         if pretrained_body_cpg is not None:
-            self.pretrain_bc(configuration, pretrained_body_cpg)
-            self.pretrained_params = self.params
-            params = self.params
+            self.logger = configuration.logger
+            self.pretrain_bc_from_archive(configuration, pretrained_body_cpg)
+            self.save_controller(self.logger, "pretrained_controller")
+
+        self.pretrained_params = self.params
+        params = self.params
 
         # Leave rest of training to superclass
         super().train_controller(configuration, num_steps)
@@ -129,7 +134,14 @@ class NNControllerPretrain(BaseNNController):
         def expert_rollout(rng, expert_cpg_state, angle, speed):
             def scan_step(carry, _):
                 cpg_state, env_state = carry
-                obs = self.build_obs_angle(env_state, angle, speed)
+
+                sector_size = 2 * jnp.pi / 5
+                relative_angle = angle - env_state.observations["disk_rotation"][2]
+                relative_angle = jnp.mod(relative_angle + jnp.pi, 2 * jnp.pi) - jnp.pi
+                k = jnp.round(relative_angle / sector_size).astype(int) % 5
+                local_angle = relative_angle - k * sector_size
+                obs = self.build_obs_angle(env_state, local_angle, k, speed)
+
                 cpg_state = cpg.step(cpg_state)
                 joint_actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
                 env_state = env.step(joint_actions, env_state)
@@ -141,123 +153,8 @@ class NNControllerPretrain(BaseNNController):
 
         return jax.jit(expert_rollout)
 
-    def pretrain_bc(self, configuration, body_cpg,
-                    bc_iterations=100, warmup_iterations=20,
-                    num_rollout_steps=500, noise_std=0.02, bc_lr=1e-3):
-        """Twee-fasen pretraining vóór PPO.
-
-        Fase 1 – Behavioral Cloning:
-          Verzamel observaties door de expert-gait (voor alle 5 armen via symmetrie)
-          te spelen. Train de policy head via MSE op de expert-acties.
-
-        Fase 2 – Value warm-up:
-          Draai rollouts met de BC-getrainde policy en train enkel de value head
-          zodat de advantage-schattingen kloppen bij de start van PPO.
-
-        Args:
-            configuration: trainings-configuratie.
-            body_cpg: platte JAX-array met de CPG-parameters van de rechts-gait.
-            bc_iterations: aantal BC-updateslagen.
-            warmup_iterations: aantal value-warm-up iteraties.
-            num_rollout_steps: stappen per rollout per richting.
-            noise_std: standaardafwijking van de ruis op expert-acties.
-            bc_lr: learning rate voor BC.
-        """
-        rng = configuration.random.rng
-        env = Environment(configuration)
-        cpg_generator = configuration.cpg.cpg_generator
-        cpg = cpg_generator.generate(configuration)
-
-        # Initialiseer model-parameters als dat nog niet gedaan is
-        if self.params is None:
-            rng, init_key = jax.random.split(rng)
-            dummy_env = env.reset(init_key)
-            dummy_input = self.build_obs_angle(dummy_env, 0.0)
-            rng, init_key2 = jax.random.split(rng)
-            self.params = self.model.init(init_key2, dummy_input)
-
-        arm_angles = jnp.arange(5) * (2 * jnp.pi / 5)
-
-        # Expert CPG-state voor arm 0 (rechts), roteer naar alle 5 richtingen
-        expert_cpg_right = cpg_generator.modulate_body(cpg.reset(), body_cpg)
-        expert_cpg_states = [
-            cpg_generator.modulate_symmetric_rotation(expert_cpg_right, k)
-            for k in range(5)
-        ]
-
-        expert_rollout_fn = self._make_expert_rollout_fn(
-            env, cpg_generator, cpg, configuration, num_rollout_steps
-        )
-
-        # --- Fase 1: Behavioral Cloning ---
-        bc_optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(bc_lr))
-        bc_opt_state = bc_optimizer.init(self.params)
-
-        print("=== Fase 1: Behavioral Cloning ===")
-        for iteration in range(bc_iterations):
-            rng, *keys = jax.random.split(rng, 7)
-
-            # Observaties én joint actions verzamelen voor alle 5 richtingen (speed=1.0)
-            rollouts = [
-                expert_rollout_fn(keys[k], expert_cpg_states[k], arm_angles[k], 1.0)
-                for k in range(5)
-            ]
-            obs_batch = jnp.concatenate([r[0] for r in rollouts])       # (5*num_rollout_steps, obs_dim)
-            expert_targets = jnp.concatenate([r[1] for r in rollouts])  # (5*num_rollout_steps, 30)
-
-            # Kleine ruis toevoegen voor generalisatie
-            rng, noise_key = jax.random.split(rng)
-            expert_targets = expert_targets + jax.random.normal(noise_key, expert_targets.shape) * noise_std
-
-            self.params, bc_opt_state, loss = bc_update_jit(
-                self.params, bc_opt_state, self.model, obs_batch, expert_targets, bc_optimizer
-            )
-
-            if iteration % 10 == 0:
-                print(f"  BC iter {iteration:3d}, loss: {loss:.6f}")
-
-        # --- Fase 2: Value warm-up ---
-        print("=== Fase 2: Value warm-up ===")
-        rollout_fn = self._make_rollout_fn(env, self.model, configuration, num_rollout_steps)
-        warmup_optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
-        warmup_opt_state = warmup_optimizer.init(self.params)
-
-        for iteration in range(warmup_iterations):
-            rng, subkey = jax.random.split(rng)
-            keys = jax.random.split(subkey, 5)
-            speeds = jnp.ones(5)
-
-            traj = jax.vmap(rollout_fn, in_axes=(0, None, 0, 0))(keys, self.params, arm_angles, speeds)
-            all_obs, all_act, all_logp, all_val, all_rew = traj
-
-            _, last_vals = jax.vmap(lambda o: self.model.apply(self.params, o[-1]))(all_obs)
-            val_bufs = jax.vmap(lambda v, lv: jnp.append(v, lv))(all_val, last_vals)
-
-            advantages_list = [
-                self.compute_gae(r, v, jnp.zeros(len(r)))
-                for r, v in zip(all_rew, val_bufs)
-            ]
-            returns_list = [adv + v[:-1] for adv, v in zip(advantages_list, val_bufs)]
-            returns = jnp.concatenate(returns_list)
-
-            obs_buf = all_obs.reshape(-1, all_obs.shape[-1])
-            act_buf = all_act.reshape(-1, all_act.shape[-1])
-            logp_buf = all_logp.reshape(-1)
-            dummy_adv = jnp.zeros(len(returns))
-
-            batch = (obs_buf, act_buf, logp_buf, returns, dummy_adv)
-            self.params, warmup_opt_state, loss = value_warmup_jit(
-                self.params, warmup_opt_state, self.model, batch, warmup_optimizer
-            )
-
-            if iteration % 5 == 0:
-                print(f"  Value warm-up iter {iteration:2d}, loss: {loss:.6f}")
-
-        print("=== Pretraining klaar ===")
-        return self.params
-
     def pretrain_bc_from_archive(self, configuration, archive_path,
-                                  bc_iterations=100, warmup_iterations=20,
+                                  bc_iterations=1000, warmup_iterations=20,
                                   num_rollout_steps=500, noise_std=0.02,
                                   bc_lr=1e-3, min_displacement=0.2, top_k=10):
         """BC-pretraining met meerdere expert-gaits uit een map-elites archief.
@@ -285,7 +182,7 @@ class NNControllerPretrain(BaseNNController):
         # Het archief is aangemaakt met de FullyConnectedCPGGenerator (30 oscillatoren,
         # genome_size = 1 + 30 + 30 + 30×30 = 961).  We gebruiken die generator hier
         # expliciet, ongeacht de CPG-configuratie in `configuration`.
-        cpg_generator = FullyConnectedCPGGenerator()
+        cpg_generator = FullyConnectedSymmetricCPGGenerator()
         cpg = cpg_generator.generate(configuration)
 
         # Initialiseer model-parameters
@@ -302,7 +199,7 @@ class NNControllerPretrain(BaseNNController):
         x_positions = np.load(archive / "x_positions.npy") # (N,)
 
         # Filter op gaits die duidelijk bewegen
-        mask = np.abs(x_positions) > min_displacement
+        mask = x_positions > min_displacement
         filtered_selections = selections[mask]
         filtered_x = x_positions[mask]
 
@@ -330,7 +227,7 @@ class NNControllerPretrain(BaseNNController):
         print(f"Archief: {len(selections)} gaits, {k} geselecteerd "
               f"(uniform over [{min_displacement:.2f}, {max_speed:.2f}], {top_k} bins).")
 
-        arm_angles = jnp.arange(5) * (2 * jnp.pi / 5)
+        target_angle = 0.0
         expert_rollout_fn = self._make_expert_rollout_fn(
             env, cpg_generator, cpg, configuration, num_rollout_steps
         )
@@ -339,26 +236,29 @@ class NNControllerPretrain(BaseNNController):
         # Genereer expert-data EENMALIG — rollouts zijn deterministisch voor
         # vaste CPG-params, dus elke iteratie opnieuw genereren is pure verspilling.
         print("Expert-rollouts genereren (eenmalig)...")
-        rng, *keys = jax.random.split(rng, k * 5 + 1)
-        key_idx = 0
+        rng, *keys = jax.random.split(rng, k + 1)
         all_obs = []
         all_actions = []
 
         for gait_idx, (gait_params, x_pos) in enumerate(zip(top_selections, top_x)):
             norm_speed = float(abs(x_pos) / max_speed)
-            base_rot = 0 if x_pos > 0 else len(arm_angles) // 2
+            self.norm_speeds.append(norm_speed)
+            self.speeds.append(abs(x_pos)/800)
+            print(norm_speed)
+            print(abs(x_pos)/800)
+            base_rot = 0 if x_pos > 0 else 2
             expert_cpg = cpg_generator.modulate_body(cpg.reset(), jnp.array(gait_params))
-            expert_cpg_states = [
-                cpg_generator.modulate_symmetric_rotation(expert_cpg, (i + base_rot) % len(arm_angles))
-                for i in range(len(arm_angles))
-            ]
-            rollouts = [
-                expert_rollout_fn(keys[key_idx + i], expert_cpg_states[i], arm_angles[i], norm_speed)
-                for i in range(len(arm_angles))
-            ]
-            key_idx += len(arm_angles)
-            all_obs.extend([r[0] for r in rollouts])
-            all_actions.extend([r[1] for r in rollouts])
+            expert_cpg_state = cpg_generator.modulate_symmetric_rotation(expert_cpg, base_rot)
+            
+            obs, actions = expert_rollout_fn(
+                keys[gait_idx],
+                expert_cpg_state,
+                target_angle,
+                norm_speed
+            )
+
+            all_obs.append(obs)
+            all_actions.append(actions)
             print(f"  Gait {gait_idx + 1}/{k}  snelheid={norm_speed:.2f}  klaar")
 
         obs_dataset = jnp.concatenate(all_obs)       # (k*5*T, obs_dim)
@@ -370,7 +270,7 @@ class NNControllerPretrain(BaseNNController):
             noise_key, target_dataset.shape) * noise_std
 
         n_samples = obs_dataset.shape[0]
-        batch_size = 2048
+        batch_size = 512
         print(f"Dataset: {n_samples} samples — {bc_iterations} epochs, "
               f"mini-batches van {batch_size}")
 
@@ -410,10 +310,22 @@ class NNControllerPretrain(BaseNNController):
 
         for iteration in range(warmup_iterations):
             rng, subkey = jax.random.split(rng)
-            keys = jax.random.split(subkey, 5)
-            speeds = jnp.ones(5)  # volle snelheid voor warm-up
 
-            traj = jax.vmap(rollout_fn, in_axes=(0, None, 0, 0))(keys, self.params, arm_angles, speeds)
+            keys = jax.random.split(subkey, len(self.speeds))
+
+            speeds = jnp.array(self.speeds)
+
+            traj = jax.vmap(
+                rollout_fn,
+                in_axes=(0, None, None, 0, 0)
+            )(
+                keys,
+                self.params,
+                0.0,
+                speeds,
+                jnp.array(self.norm_speeds)
+            )
+
             all_obs, all_act, all_logp, all_val, all_rew = traj
 
             _, last_vals = jax.vmap(lambda o: self.model.apply(self.params, o[-1]))(all_obs)
@@ -463,12 +375,31 @@ class NNControllerPretrain(BaseNNController):
         angle = jnp.arctan2(deltas[1], deltas[0])
         rot = obs["disk_rotation"][2]
 
+        relative_angle = jnp.mod(angle - rot + jnp.pi, 2 * jnp.pi) - jnp.pi
+
+
+        sector_size = 2 * jnp.pi / 5
+        k_raw = int(jnp.round(relative_angle / sector_size))
+        sector = k_raw % 5
+        local_angle = relative_angle - k_raw * sector_size 
+
+
         # Snelheid: proportioneel aan afstand tot doel, verzadigt op 1.0
         # (robot vertraagt automatisch als het doel nadert)
-        speed = jnp.clip(distance, 0.0, 1.0)
+        speed = np.clip(distance, 0.0, 1.0)
+        print("SPEED: ", speed)
+        print("SECTOR: ", sector)
+        print("ANGLE: ", (local_angle / jnp.pi)*180)
+        robot_pos = obs["disk_position"][0:2]
+        print("POS: ", robot_pos)
 
-        x = self.build_obs_angle(env_state, angle - rot, speed)
+        x = self.build_obs_angle(env_state, local_angle, sector, speed)
+
         dist, _ = self.model.apply(self.params, x)
+        rng = jax.random.PRNGKey(np.random.randint(0, 1_000_000))
+        actions = dist.mode()
+        shift = 6 * sector
+        rotated_actions = jnp.roll(actions, shift)
 
         # Directe joint actions — geen CPG tussenstap
-        return dist.mode()
+        return rotated_actions

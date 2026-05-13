@@ -28,9 +28,9 @@ class ActorCritic(nn.Module):
     @nn.compact
     def __call__(self, x):
         # shared encoder
-        x = nn.Dense(128)(x)
+        x = nn.Dense(256)(x)
         x = nn.tanh(x)
-        x = nn.Dense(128)(x)
+        x = nn.Dense(256)(x)
         x = nn.tanh(x)
 
         # policy
@@ -56,6 +56,8 @@ class BaseNNController(Controller, ABC):
         )
         self.logger = None
         self.epochs = 6
+        self.speeds = []
+        self.norm_speeds = []
 
     @abstractmethod
     def act(self, cpg_state, control_input, configuration, env_state):
@@ -65,62 +67,37 @@ class BaseNNController(Controller, ABC):
     def evaluator(configuration, rng):
         pass
 
-    def angle_reward(self, prev_pos, curr_pos, prev_rot, curr_rot, angle):
+    def angle_reward(self, prev_pos, curr_pos, angle, speed_target):
         delta = curr_pos[:2] - prev_pos[:2]
         direction = jnp.array([jnp.cos(angle), jnp.sin(angle)])
 
-        rotation_penalty = jnp.abs(curr_rot - prev_rot)
+        forward_velocity = jnp.dot(delta, direction)
 
-        return jnp.dot(delta, direction) # - 0.02 *rotation_penalty
+        speed_error = (forward_velocity - speed_target) ** 2
 
-    def build_obs_angle(self, env_state, angle, speed=1.0):
+        speed_reward = -speed_error * 1.5
+
+        return (forward_velocity * 1) + speed_reward
+
+    def build_obs_angle(self, env_state, angle, sector=0, speed=1.0):
         obs = env_state.observations
         # Encodeer hoek als sin/cos zodat 0° en 360° hetzelfde zijn
         angle_enc = jnp.array([jnp.sin(angle), jnp.cos(angle)])
+
         return jnp.concatenate(
             [
-                jnp.array([obs["disk_rotation"][2]]),
                 angle_enc,
                 jnp.atleast_1d(jnp.asarray(speed, dtype=jnp.float32)),  # doelsnelheid (1D)
-                obs["joint_position"],   # huidige gewrichtshoeken (30D)
-                obs["joint_velocity"],   # gewrichtssnelheden voor fase-informatie (30D)
-            ]
-        )
-
-    def network_output_to_body(self, action, cpg_state, leading_arm_idx):
-        """Vul freq + amplitudes in vanuit netwerk, hou offsets en phase biases vast."""
-        frequency = action[0:1]
-        amplitudes = action[1:]
-
-        default_cpg_state = BasicCPGGenerator.modulate_cpg(
-            cpg_state=cpg_state,
-            leading_arm_index=leading_arm_idx,
-            max_joint_limit=1.0,
-        )
-
-        return jnp.concatenate(
-            [
-                frequency,
-                amplitudes,
-                default_cpg_state.offset_goals,  # vast houden op huidige waarden
-                default_cpg_state.coupled_phase_biases.ravel(),  # vast houden
+                jnp.roll(obs["joint_position"], 6 * sector),  # huidige gewrichtshoeken (30D)
+                jnp.roll(obs["joint_velocity"], 6 * sector), # gewrichtssnelheden voor fase-informatie (30D)
+                jnp.roll(obs["segment_contact"], 6 * sector)
             ]
         )
     
     def get_angles(self, key=None):
-        return jnp.arange(5) * (2 * jnp.pi / 5)
-
-    def angle_to_arm_relative(self, angle, disk_rotation_z):
-        """Bereken welke arm het dichtst bij de gewenste richting ligt,
-        rekening houdend met de huidige rotatie van de robot."""
-        # Relatieve hoek: gewenste richting min huidige rotatie
-        relative_angle = angle - disk_rotation_z
-
-        arm_angles = self.get_angles()
-        diff = jnp.abs((relative_angle - arm_angles + jnp.pi) % (2 * jnp.pi) - jnp.pi)
-        return jnp.argmin(diff)
+        return jnp.array([0.0])
     
-    def train_controller(self, configuration, num_steps=1000):
+    def train_controller(self, configuration, num_steps=500):
         """Train de controller via PPO.
 
         Args:
@@ -149,17 +126,27 @@ class BaseNNController(Controller, ABC):
 
         rollout_fn = self._make_rollout_fn(env, self.model, configuration, num_steps)
 
-        def rollout_many(rng, params, angles, speeds):
+        def rollout_many(rng, params, angles, speeds, norm_speeds):
             keys = jax.random.split(rng, len(angles))
-            return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0))(keys, params, angles, speeds)
+            return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0, 0))(keys, params, angles, speeds, norm_speeds)
 
-        for iteration in range(100):
+        for iteration in range(500):
+            if iteration % 100 == 0 and iteration != 0:
+                self.save_controller(self.logger, f"controller_{iteration}")
             print(f"Starting iteration {iteration}")
-            rng, subkey, angle_key = jax.random.split(rng, 3)
-            arm_angles = self.get_angles(angle_key)
-            speeds = jnp.ones(len(arm_angles))  # PPO traint bij volle snelheid
+            rng, subkey, speed_key = jax.random.split(rng, 3)
 
-            traj = rollout_many(subkey, params, arm_angles, speeds)
+            # Wereldframe doelhoek: volledig random over 360°
+            arm_angles = jax.random.uniform(subkey, shape=(len(self.speeds),), minval=0.0, maxval=2*jnp.pi)
+            
+            # Interpoleer tussen bekende speeds voor betere generalisatie
+            max_speed = self.speeds[-1]
+            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds),), minval=0.0, maxval=1.0)
+            speeds_random = norm_speeds_random * max_speed  # echte m/s in simulator voor reward
+            print("MAX: ", max_speed)
+            print("NORM: ", norm_speeds_random)
+            print("SIM: ", speeds_random)
+            traj = rollout_many(subkey, params, arm_angles, speeds_random, norm_speeds_random)  # consistent!
 
             all_obs, all_act, all_logp, all_val, all_rew = traj
 
@@ -225,27 +212,34 @@ class BaseNNController(Controller, ABC):
         return params, opt_state
     
     def _make_rollout_fn(self, env, model, configuration, num_steps):
-        def rollout_fn(rng, params, angle, speed):
+        def rollout_fn(rng, params, angle, speed, norm_speed):
 
             def scan_step(carry, _):
                 env_state, rng = carry
                 rng, subkey = jax.random.split(rng)
+                relative_angle = angle - env_state.observations["disk_rotation"][2]
+                relative_angle = jnp.mod(relative_angle + jnp.pi, 2 * jnp.pi) - jnp.pi
 
-                x = self.build_obs_angle(env_state, angle - env_state.observations["disk_rotation"][2], speed)
+                sector_size = 2 * jnp.pi / 5
+                k_raw = jnp.round(relative_angle / sector_size).astype(int)
+                k_idx = k_raw % 5
+                local_angle = relative_angle - k_raw * sector_size 
+
+                x = self.build_obs_angle(env_state, local_angle, k_idx, norm_speed)
                 dist, value = model.apply(params, x)
 
                 action = dist.sample(seed=subkey)
+                action_world = jnp.roll(action, 6 * k_idx)
+
                 log_prob = dist.log_prob(action)
 
                 prev_pos = env_state.observations["disk_position"]
-                prev_rot = env_state.observations["disk_rotation"][2]
 
                 # Netwerk output zijn directe joint actions — geen CPG tussenstap
-                env_state = env.step(action, env_state)
+                env_state = env.step(action_world, env_state)
 
                 curr_pos = env_state.observations["disk_position"]
-                curr_rot = env_state.observations["disk_rotation"][2]
-                reward = self.angle_reward(prev_pos, curr_pos, prev_rot, curr_rot, angle)
+                reward = self.angle_reward(prev_pos, curr_pos, angle, speed)
 
                 return (env_state, rng), (x, action, log_prob, value, reward)
 
@@ -267,8 +261,8 @@ class BaseNNController(Controller, ABC):
 
         return jnp.array(advantages)
 
-    def save_controller(self, logger):
-        path = Path(logger.base_folder) / "controller"
+    def save_controller(self, logger, name="controller"):
+        path = Path(logger.base_folder) / name
         path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(path, "wb") as f:

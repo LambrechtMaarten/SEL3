@@ -93,7 +93,7 @@ if __name__ == "__main__":
         configuration = Configuration(
             SubConfigurationMap.get_configuration(Logger, "wandb"),
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
             SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
             SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
@@ -101,9 +101,7 @@ if __name__ == "__main__":
         configuration.logger.init_logger()
 
         controller = configuration.controller.controller
-        controller.logger = configuration.logger
-        controller.pretrain_bc_from_archive(configuration, sys.argv[2])
-        controller.save_controller(configuration.logger)
+        controller.train_controller(configuration, pretrained_body_cpg=sys.argv[2])
         print(f"Controller opgeslagen in: {configuration.logger.base_folder}")
 
     elif sys.argv[1] == "simulate":
