@@ -30,7 +30,7 @@ def simulate_controller(output_path: str):
     )
     env = Environment(configuration)
     configuration.controller.controller.read_controller(
-        os.path.join(output_path, "controller")
+        os.path.join(output_path, "controller_200")
     )
     env_state = env.reset(configuration.random.split())
 
@@ -45,12 +45,7 @@ def simulate_controller(output_path: str):
         if key == 27:
             break
 
-        control_input = {
-            ord("z"): ControlInput.UP,
-            ord("s"): ControlInput.DOWN,
-            ord("q"): ControlInput.LEFT,
-            ord("d"): ControlInput.RIGHT,
-        }.get(key, ControlInput.WAIT)
+        control_input = (0.0,0.0)
 
         # act geeft directe joint actions terug — geen CPG tussenstap
         actions = configuration.controller.controller.act(

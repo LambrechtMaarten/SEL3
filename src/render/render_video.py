@@ -16,6 +16,8 @@ from configs.subcontrollers.simulation.simulation_configurations import (
 from src.controller.control_input import ControlInput
 from src.environment.environment import Environment
 import jax.numpy as jnp
+import numpy as np
+import jax
 
 
 def render_saved_controller(controller_path: str):
@@ -32,7 +34,7 @@ def render_saved_controller(controller_path: str):
     configuration.logger.init_logger()
 
     controller = configuration.controller.controller
-    controller.read_controller(os.path.join(controller_path, "controller_300"))
+    controller.read_controller(os.path.join(controller_path, "controller_950"))
 
     env = Environment(configuration)
 
@@ -49,8 +51,11 @@ def render_saved_controller(controller_path: str):
         [2.0,0.0], [-2.0,-2.0], [0.0,0.0]
     ]
     reward = 0.0
+    tracking_r = 0.0
     prev_pos = jnp.array([0.0,0.0])
-    while i < len(control_inputs) and j < 2000:
+    target = 0.003644313/2
+    velocity_err = 0.0
+    while i < len(control_inputs) and j < 1000:
         env_state = env_state
         actions = controller.act(
             cpg_state, control_inputs[i], configuration, env_state
@@ -60,22 +65,41 @@ def render_saved_controller(controller_path: str):
         STOP_THRESHOLD = 0.075
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
+
         delta = robot_pos - prev_pos
-        prev_pos = robot_pos
 
-        direction = jnp.array([jnp.cos(0.0), jnp.sin(0.0)])
-        f_v = jnp.dot(delta, direction)
+        direction = jnp.array([
+            jnp.cos(0.0),
+            jnp.sin(0.0)
+        ])
 
-        reward += f_v
+        velocity = jnp.dot(delta, direction)
+
+        # SPEED TRACKING
+        tracking_reward = -(
+            (velocity - target)
+            / (target + 0.1)
+        ) ** 2
+        print("VELOCITY:", velocity)
+        velocity_err += jnp.abs(velocity - target)
+
+        reward += 0.0001 * jnp.mean(actions ** 2)
+        tracking_r += tracking_reward * 4
 
         deltas = jnp.array(control_inputs[i]) - robot_pos
+        prev_pos = robot_pos
         distance = jnp.linalg.norm(deltas)
         if distance < STOP_THRESHOLD:
+            print("REACHED GOAL")
+            print("REACHED GOAL")
+            print("REACHED GOAL")
             i += 1
             j = 0
         j += 1
 
         frames.append(env.render(env_state))
     print(reward)
+    print(tracking_r)
+    print(velocity_err)
 
     configuration.logger.log_video(frames, "video.mp4")

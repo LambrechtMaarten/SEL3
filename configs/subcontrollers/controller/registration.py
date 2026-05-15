@@ -6,6 +6,7 @@ from src.controller.NN_controller import NNController
 from src.controller.NN_controller_target import NNControllerTarget
 from src.controller.NN_controller_pretrain import NNControllerPretrain
 from src.controller.one_direction_controller import OneDirectionController
+from src.controller.NN_controller_angle import NNControllerAngle
 
 
 def register():
@@ -21,6 +22,11 @@ def register():
     SubConfigurationMap.add_configuration(
         ControllerConfiguration,
         ControllerConfiguration("network_pretrain", NNControllerPretrain()),
+    )
+
+    SubConfigurationMap.add_configuration(
+        ControllerConfiguration,
+        ControllerConfiguration("angle", NNControllerAngle()),
     )
 
     SubConfigurationMap.add_configuration(

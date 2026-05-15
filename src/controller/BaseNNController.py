@@ -7,6 +7,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import optax
+import numpy as np
 
 from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
@@ -67,17 +68,35 @@ class BaseNNController(Controller, ABC):
     def evaluator(configuration, rng):
         pass
 
-    def angle_reward(self, prev_pos, curr_pos, angle, speed_target):
+    def angle_reward(
+        self,
+        prev_pos,
+        curr_pos,
+        angle,
+        speed_target,
+        actions,
+    ):
         delta = curr_pos[:2] - prev_pos[:2]
-        direction = jnp.array([jnp.cos(angle), jnp.sin(angle)])
 
-        forward_velocity = jnp.dot(delta, direction)
+        direction = jnp.array([
+            jnp.cos(angle),
+            jnp.sin(angle)
+        ])
 
-        speed_error = (forward_velocity - speed_target) ** 2
+        velocity = jnp.dot(delta, direction)
 
-        speed_reward = -speed_error * 1.5
+        # SPEED TRACKING
+        tracking_reward = -(
+            (velocity - speed_target)
+            / (speed_target + 0.1)
+        ) ** 2
 
-        return (forward_velocity * 1) + speed_reward
+        # ENERGY EFFICIENCY
+        energy_penalty = -0.0001 * jnp.mean(actions ** 2)
+
+        total_reward = (tracking_reward * 4) + energy_penalty
+
+        return total_reward, tracking_reward * 4, energy_penalty
 
     def build_obs_angle(self, env_state, angle, sector=0, speed=1.0):
         obs = env_state.observations
@@ -94,8 +113,14 @@ class BaseNNController(Controller, ABC):
             ]
         )
     
-    def get_angles(self, key=None):
-        return jnp.array([0.0])
+    def to_local_angle_and_sector(self, relative_angle):
+        angle = jnp.mod(relative_angle + jnp.pi, 2 * jnp.pi) - jnp.pi
+        sector_size = 2 * jnp.pi / 5
+        k_raw = jnp.round(angle / sector_size).astype(int)
+        k_idx = k_raw % 5
+        local_angle = angle - k_raw * sector_size 
+        
+        return (local_angle, k_idx)
     
     def train_controller(self, configuration, num_steps=500):
         """Train de controller via PPO.
@@ -130,8 +155,9 @@ class BaseNNController(Controller, ABC):
             keys = jax.random.split(rng, len(angles))
             return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0, 0))(keys, params, angles, speeds, norm_speeds)
 
-        for iteration in range(500):
-            if iteration % 100 == 0 and iteration != 0:
+        for iteration in range(1000):
+            if iteration % 50 == 0 and iteration != 0:
+                self.params = params
                 self.save_controller(self.logger, f"controller_{iteration}")
             print(f"Starting iteration {iteration}")
             rng, subkey, speed_key = jax.random.split(rng, 3)
@@ -141,14 +167,22 @@ class BaseNNController(Controller, ABC):
             
             # Interpoleer tussen bekende speeds voor betere generalisatie
             max_speed = self.speeds[-1]
-            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds),), minval=0.0, maxval=1.0)
+            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds),), minval=0.01, maxval=1.0)
             speeds_random = norm_speeds_random * max_speed  # echte m/s in simulator voor reward
             print("MAX: ", max_speed)
             print("NORM: ", norm_speeds_random)
             print("SIM: ", speeds_random)
             traj = rollout_many(subkey, params, arm_angles, speeds_random, norm_speeds_random)  # consistent!
 
-            all_obs, all_act, all_logp, all_val, all_rew = traj
+            (
+                all_obs,
+                all_act,
+                all_logp,
+                all_val,
+                all_rew,
+                all_speed_rewards,
+                all_action_penalties,
+            ) = traj
 
             obs_buf = all_obs.reshape(-1, all_obs.shape[-1])
             act_buf = all_act.reshape(-1, all_act.shape[-1])
@@ -181,6 +215,8 @@ class BaseNNController(Controller, ABC):
             print("Average advantage:", jnp.mean(advantages))
             print("Average return:", jnp.mean(returns))
 
+            
+
             batch = (
                 jnp.array(obs_buf),
                 jnp.array(act_buf),
@@ -188,12 +224,23 @@ class BaseNNController(Controller, ABC):
                 returns,
                 advantages,
             )
+
+            avg_speed_reward = jnp.mean(all_speed_rewards)
+            avg_action_penalty = jnp.mean(all_action_penalties)
+
+            total_speed_reward = jnp.sum(all_speed_rewards)
+            total_action_penalty = jnp.sum(all_action_penalties)
+
             log_data = {
                 "total_reward": jnp.sum(rew_buf),
+                "total_speed_reward": total_speed_reward,
+                "total_action_penalty": total_action_penalty,
                 "average_reward": jnp.sum(rew_buf) / len(arm_angles),
                 "average_reward_per_step": jnp.sum(rew_buf) / len(rew_buf),
-                "average_advantage": jnp.mean(advantages),
+                "avg_speed_reward": avg_speed_reward,
+                "avg_action_penalty": avg_action_penalty,
                 "average_return": jnp.mean(returns),
+                "average_advantage": jnp.mean(advantages),
             }
 
             params, opt_state = self.update_and_log(params, opt_state, batch, iteration, log_data)
@@ -218,12 +265,8 @@ class BaseNNController(Controller, ABC):
                 env_state, rng = carry
                 rng, subkey = jax.random.split(rng)
                 relative_angle = angle - env_state.observations["disk_rotation"][2]
-                relative_angle = jnp.mod(relative_angle + jnp.pi, 2 * jnp.pi) - jnp.pi
-
-                sector_size = 2 * jnp.pi / 5
-                k_raw = jnp.round(relative_angle / sector_size).astype(int)
-                k_idx = k_raw % 5
-                local_angle = relative_angle - k_raw * sector_size 
+                
+                local_angle, k_idx = self.to_local_angle_and_sector(relative_angle)
 
                 x = self.build_obs_angle(env_state, local_angle, k_idx, norm_speed)
                 dist, value = model.apply(params, x)
@@ -239,9 +282,17 @@ class BaseNNController(Controller, ABC):
                 env_state = env.step(action_world, env_state)
 
                 curr_pos = env_state.observations["disk_position"]
-                reward = self.angle_reward(prev_pos, curr_pos, angle, speed)
+                reward, speed_reward, action_penalty = self.angle_reward(prev_pos, curr_pos, angle, speed, action_world)
 
-                return (env_state, rng), (x, action, log_prob, value, reward)
+                return (env_state, rng), (
+                    x,
+                    action,
+                    log_prob,
+                    value,
+                    reward,
+                    speed_reward,
+                    action_penalty,
+                )
 
             init = (env.reset(rng), rng)
 
@@ -278,6 +329,48 @@ class BaseNNController(Controller, ABC):
     def genome_size(self, configuration):
         flat_params, _ = jax.flatten_util.ravel_pytree(self.params)
         return flat_params.shape[0]
+    
+    def act(self, cpg_state, control_input, configuration, env_state):
+        STOP_THRESHOLD = 0.05
+
+        obs = env_state.observations
+        robot_pos = obs["disk_position"][0:2]
+        deltas = jnp.array(control_input) - robot_pos
+        distance = jnp.linalg.norm(deltas)
+
+        # Doel bereikt: geen beweging
+        if distance < STOP_THRESHOLD:
+            return jnp.zeros(30)
+
+        angle = jnp.arctan2(deltas[1], deltas[0])
+        rot = obs["disk_rotation"][2]
+
+        relative_angle = angle - rot
+        local_angle, sector = self.to_local_angle_and_sector(relative_angle)
+
+        # Snelheid: proportioneel aan afstand tot doel, verzadigt op 1.0
+        # (robot vertraagt automatisch als het doel nadert)
+        speed = np.clip(distance, 0.001, 1.0)
+
+        # To prevent getting stuck
+        rng = jax.random.PRNGKey(np.random.randint(0, 1_000_000))
+        
+        print("SPEED: ", speed)
+        print("SECTOR: ", sector)
+        print("ANGLE: ", (local_angle / jnp.pi)*180)
+        robot_pos = obs["disk_position"][0:2]
+        print("POS: ", robot_pos)
+
+        x = self.build_obs_angle(env_state, local_angle, sector, speed)
+
+        dist, _ = self.model.apply(self.params, x)
+        
+        actions = dist.mode()
+        shift = 6 * sector
+        rotated_actions = jnp.roll(actions, shift)
+
+        # Directe joint actions — geen CPG tussenstap
+        return rotated_actions
     
 
 

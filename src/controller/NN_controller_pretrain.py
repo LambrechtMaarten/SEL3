@@ -90,7 +90,6 @@ class NNControllerPretrain(BaseNNController):
         # KL-annealing: start bij 0.1, halveert elke ~35 iteraties
         self.kl_coef_init = jnp.array(0.1)
         self.kl_decay = jnp.array(50.0)
-        self.current_sector = 0
 
     def train_controller(self, configuration, num_steps=1000, pretrained_body_cpg=None):
         """Train de controller via PPO.
@@ -135,15 +134,17 @@ class NNControllerPretrain(BaseNNController):
             def scan_step(carry, _):
                 cpg_state, env_state = carry
 
-                sector_size = 2 * jnp.pi / 5
                 relative_angle = angle - env_state.observations["disk_rotation"][2]
-                relative_angle = jnp.mod(relative_angle + jnp.pi, 2 * jnp.pi) - jnp.pi
-                k = jnp.round(relative_angle / sector_size).astype(int) % 5
-                local_angle = relative_angle - k * sector_size
+                local_angle, k = self.to_local_angle_and_sector(relative_angle);
+
                 obs = self.build_obs_angle(env_state, local_angle, k, speed)
 
                 cpg_state = cpg.step(cpg_state)
                 joint_actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
+                
+                shift = jnp.where(angle == jnp.pi/5, -12, 0)
+                joint_actions = jnp.roll(joint_actions, shift)
+                
                 env_state = env.step(joint_actions, env_state)
                 return (cpg_state, env_state), (obs, joint_actions)
 
@@ -156,7 +157,7 @@ class NNControllerPretrain(BaseNNController):
     def pretrain_bc_from_archive(self, configuration, archive_path,
                                   bc_iterations=1000, warmup_iterations=20,
                                   num_rollout_steps=500, noise_std=0.02,
-                                  bc_lr=1e-3, min_displacement=0.2, top_k=10):
+                                  bc_lr=1e-3, min_displacement=0.2, top_k=15):
         """BC-pretraining met meerdere expert-gaits uit een map-elites archief.
 
         Vergelijkbaar met pretrain_bc, maar gebruikt top_k gaits uit het
@@ -199,7 +200,7 @@ class NNControllerPretrain(BaseNNController):
         x_positions = np.load(archive / "x_positions.npy") # (N,)
 
         # Filter op gaits die duidelijk bewegen
-        mask = x_positions > min_displacement
+        mask = jnp.abs(x_positions) > min_displacement
         filtered_selections = selections[mask]
         filtered_x = x_positions[mask]
 
@@ -215,6 +216,7 @@ class NNControllerPretrain(BaseNNController):
             if len(in_bin) > 0:
                 best = in_bin[np.argmax(np.abs(filtered_x[in_bin]))]
                 selected_indices.append(int(best))
+
         # Voeg altijd de snelste gait toe als die nog niet in de selectie zit
         fastest_idx = int(np.argmax(np.abs(filtered_x)))
         if fastest_idx not in selected_indices:
@@ -227,7 +229,6 @@ class NNControllerPretrain(BaseNNController):
         print(f"Archief: {len(selections)} gaits, {k} geselecteerd "
               f"(uniform over [{min_displacement:.2f}, {max_speed:.2f}], {top_k} bins).")
 
-        target_angle = 0.0
         expert_rollout_fn = self._make_expert_rollout_fn(
             env, cpg_generator, cpg, configuration, num_rollout_steps
         )
@@ -239,16 +240,19 @@ class NNControllerPretrain(BaseNNController):
         rng, *keys = jax.random.split(rng, k + 1)
         all_obs = []
         all_actions = []
+        target_angles = []
 
         for gait_idx, (gait_params, x_pos) in enumerate(zip(top_selections, top_x)):
             norm_speed = float(abs(x_pos) / max_speed)
             self.norm_speeds.append(norm_speed)
             self.speeds.append(abs(x_pos)/800)
-            print(norm_speed)
+
+            target_angle = 0.0 if x_pos > 0 else jnp.pi/5
+            target_angles.append(target_angle)
+
             print(abs(x_pos)/800)
-            base_rot = 0 if x_pos > 0 else 2
-            expert_cpg = cpg_generator.modulate_body(cpg.reset(), jnp.array(gait_params))
-            expert_cpg_state = cpg_generator.modulate_symmetric_rotation(expert_cpg, base_rot)
+
+            expert_cpg_state = cpg_generator.modulate_body(cpg.reset(), jnp.array(gait_params))
             
             obs, actions = expert_rollout_fn(
                 keys[gait_idx],
@@ -259,7 +263,7 @@ class NNControllerPretrain(BaseNNController):
 
             all_obs.append(obs)
             all_actions.append(actions)
-            print(f"  Gait {gait_idx + 1}/{k}  snelheid={norm_speed:.2f}  klaar")
+            print(f"  Gait {gait_idx + 1}/{k} ({"pos" if  x_pos > 0 else "neg" }) snelheid={norm_speed:.2f}  klaar")
 
         obs_dataset = jnp.concatenate(all_obs)       # (k*5*T, obs_dim)
         target_dataset = jnp.concatenate(all_actions) # (k*5*T, 30)
@@ -313,20 +317,18 @@ class NNControllerPretrain(BaseNNController):
 
             keys = jax.random.split(subkey, len(self.speeds))
 
-            speeds = jnp.array(self.speeds)
-
             traj = jax.vmap(
                 rollout_fn,
-                in_axes=(0, None, None, 0, 0)
+                in_axes=(0, None, 0, 0, 0)
             )(
                 keys,
                 self.params,
-                0.0,
-                speeds,
+                jnp.array(target_angles),
+                jnp.array(self.speeds),
                 jnp.array(self.norm_speeds)
             )
 
-            all_obs, all_act, all_logp, all_val, all_rew = traj
+            all_obs, all_act, all_logp, all_val, all_rew, _, _ = traj
 
             _, last_vals = jax.vmap(lambda o: self.model.apply(self.params, o[-1]))(all_obs)
             val_bufs = jax.vmap(lambda v, lv: jnp.append(v, lv))(all_val, last_vals)
@@ -359,47 +361,3 @@ class NNControllerPretrain(BaseNNController):
 
         print("=== Pretraining vanuit archief klaar ===")
         return self.params
-
-    def act(self, cpg_state, control_input, configuration, env_state):
-        STOP_THRESHOLD = 0.05
-
-        obs = env_state.observations
-        robot_pos = obs["disk_position"][0:2]
-        deltas = jnp.array(control_input) - robot_pos
-        distance = jnp.linalg.norm(deltas)
-
-        # Doel bereikt: geen beweging
-        if distance < STOP_THRESHOLD:
-            return jnp.zeros(30)
-
-        angle = jnp.arctan2(deltas[1], deltas[0])
-        rot = obs["disk_rotation"][2]
-
-        relative_angle = jnp.mod(angle - rot + jnp.pi, 2 * jnp.pi) - jnp.pi
-
-
-        sector_size = 2 * jnp.pi / 5
-        k_raw = int(jnp.round(relative_angle / sector_size))
-        sector = k_raw % 5
-        local_angle = relative_angle - k_raw * sector_size 
-
-
-        # Snelheid: proportioneel aan afstand tot doel, verzadigt op 1.0
-        # (robot vertraagt automatisch als het doel nadert)
-        speed = np.clip(distance, 0.0, 1.0)
-        print("SPEED: ", speed)
-        print("SECTOR: ", sector)
-        print("ANGLE: ", (local_angle / jnp.pi)*180)
-        robot_pos = obs["disk_position"][0:2]
-        print("POS: ", robot_pos)
-
-        x = self.build_obs_angle(env_state, local_angle, sector, speed)
-
-        dist, _ = self.model.apply(self.params, x)
-        rng = jax.random.PRNGKey(np.random.randint(0, 1_000_000))
-        actions = dist.mode()
-        shift = 6 * sector
-        rotated_actions = jnp.roll(actions, shift)
-
-        # Directe joint actions — geen CPG tussenstap
-        return rotated_actions

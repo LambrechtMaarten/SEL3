@@ -19,6 +19,7 @@ from configs.subcontrollers.simulation.simulation_configurations import (
 from src.render.render_video import render_saved_controller
 from src.simulation.simulate_controller import simulate_controller
 from src.training.train_controller import train_controller
+from src.simulation.robot_controller import simulate_controller_joystick
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -106,6 +107,9 @@ if __name__ == "__main__":
 
     elif sys.argv[1] == "simulate":
         simulate_controller(sys.argv[2])
+
+    elif sys.argv[1] == "simulate_controller":
+        simulate_controller_joystick(sys.argv[2])
 
     elif sys.argv[1] == "render":
         render_saved_controller(sys.argv[2])
