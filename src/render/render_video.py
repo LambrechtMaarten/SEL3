@@ -34,7 +34,7 @@ def render_saved_controller(controller_path: str):
     configuration.logger.init_logger()
 
     controller = configuration.controller.controller
-    controller.read_controller(os.path.join(controller_path, "controller_950"))
+    controller.read_controller(os.path.join(controller_path, "controller"))
 
     env = Environment(configuration)
 
@@ -53,7 +53,7 @@ def render_saved_controller(controller_path: str):
     reward = 0.0
     tracking_r = 0.0
     prev_pos = jnp.array([0.0,0.0])
-    target = 0.003644313/2
+    target = 0.003644313
     velocity_err = 0.0
     while i < len(control_inputs) and j < 1000:
         env_state = env_state
@@ -78,13 +78,12 @@ def render_saved_controller(controller_path: str):
         # SPEED TRACKING
         tracking_reward = -(
             (velocity - target)
-            / (target + 0.1)
+            / (target + 0.01)
         ) ** 2
-        print("VELOCITY:", velocity)
-        velocity_err += jnp.abs(velocity - target)
+        velocity_err += velocity
 
-        reward += 0.0001 * jnp.mean(actions ** 2)
-        tracking_r += tracking_reward * 4
+        reward += 0.0005 * jnp.mean(actions ** 2)
+        tracking_r += tracking_reward
 
         deltas = jnp.array(control_inputs[i]) - robot_pos
         prev_pos = robot_pos
@@ -98,7 +97,7 @@ def render_saved_controller(controller_path: str):
         j += 1
 
         frames.append(env.render(env_state))
-    print(reward)
+    print(-reward)
     print(tracking_r)
     print(velocity_err)
 

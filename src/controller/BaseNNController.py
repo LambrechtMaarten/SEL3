@@ -83,20 +83,20 @@ class BaseNNController(Controller, ABC):
             jnp.sin(angle)
         ])
 
-        velocity = jnp.dot(delta, direction)
+        forward_reward = jnp.dot(delta, direction)
 
         # SPEED TRACKING
-        tracking_reward = -(
-            (velocity - speed_target)
-            / (speed_target + 0.1)
+        speed_pen = -(
+            (forward_reward - speed_target)
+            / (speed_target + 0.01)
         ) ** 2
 
         # ENERGY EFFICIENCY
         energy_penalty = -0.0001 * jnp.mean(actions ** 2)
 
-        total_reward = (tracking_reward * 4) + energy_penalty
+        total_reward = forward_reward + 0.2 * speed_pen + energy_penalty
 
-        return total_reward, tracking_reward * 4, energy_penalty
+        return total_reward, forward_reward, speed_pen, energy_penalty
 
     def build_obs_angle(self, env_state, angle, sector=0, speed=1.0):
         obs = env_state.observations
@@ -167,7 +167,11 @@ class BaseNNController(Controller, ABC):
             
             # Interpoleer tussen bekende speeds voor betere generalisatie
             max_speed = self.speeds[-1]
-            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds),), minval=0.01, maxval=1.0)
+            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds)-4,), minval=0.01, maxval=1.0)
+            norm_speeds_random = jnp.concatenate([
+                norm_speeds_random,
+                jnp.ones(4)
+            ])
             speeds_random = norm_speeds_random * max_speed  # echte m/s in simulator voor reward
             print("MAX: ", max_speed)
             print("NORM: ", norm_speeds_random)
@@ -180,7 +184,8 @@ class BaseNNController(Controller, ABC):
                 all_logp,
                 all_val,
                 all_rew,
-                all_speed_rewards,
+                all_forward_rewards,
+                all_speed_penalties,
                 all_action_penalties,
             ) = traj
 
@@ -225,21 +230,19 @@ class BaseNNController(Controller, ABC):
                 advantages,
             )
 
-            avg_speed_reward = jnp.mean(all_speed_rewards)
-            avg_action_penalty = jnp.mean(all_action_penalties)
 
-            total_speed_reward = jnp.sum(all_speed_rewards)
+            total_forward_reward = jnp.sum(all_forward_rewards)
+            total_speed_penalty = jnp.sum(all_speed_penalties)
             total_action_penalty = jnp.sum(all_action_penalties)
 
             log_data = {
                 "total_reward": jnp.sum(rew_buf),
-                "total_speed_reward": total_speed_reward,
-                "total_action_penalty": total_action_penalty,
                 "average_reward": jnp.sum(rew_buf) / len(arm_angles),
                 "average_reward_per_step": jnp.sum(rew_buf) / len(rew_buf),
-                "avg_speed_reward": avg_speed_reward,
-                "avg_action_penalty": avg_action_penalty,
                 "average_return": jnp.mean(returns),
+                "avg_forward_reward": total_forward_reward/len(rew_buf),
+                "avg_speed_reward": total_speed_penalty/len(rew_buf),
+                "avg_action_penalty": total_action_penalty/len(rew_buf),
                 "average_advantage": jnp.mean(advantages),
             }
 
@@ -282,7 +285,7 @@ class BaseNNController(Controller, ABC):
                 env_state = env.step(action_world, env_state)
 
                 curr_pos = env_state.observations["disk_position"]
-                reward, speed_reward, action_penalty = self.angle_reward(prev_pos, curr_pos, angle, speed, action_world)
+                reward, forward_reward, speed_reward, action_penalty = self.angle_reward(prev_pos, curr_pos, angle, speed, action_world)
 
                 return (env_state, rng), (
                     x,
@@ -290,6 +293,7 @@ class BaseNNController(Controller, ABC):
                     log_prob,
                     value,
                     reward,
+                    forward_reward,
                     speed_reward,
                     action_penalty,
                 )

@@ -328,7 +328,7 @@ class NNControllerPretrain(BaseNNController):
                 jnp.array(self.norm_speeds)
             )
 
-            all_obs, all_act, all_logp, all_val, all_rew, _, _ = traj
+            all_obs, all_act, all_logp, all_val, all_rew, _, _, _ = traj
 
             _, last_vals = jax.vmap(lambda o: self.model.apply(self.params, o[-1]))(all_obs)
             val_bufs = jax.vmap(lambda v, lv: jnp.append(v, lv))(all_val, last_vals)
