@@ -68,35 +68,17 @@ class BaseNNController(Controller, ABC):
     def evaluator(configuration, rng):
         pass
 
-    def angle_reward(
-        self,
-        prev_pos,
-        curr_pos,
-        angle,
-        speed_target,
-        actions,
-    ):
+    def angle_reward(self, prev_pos, curr_pos, angle, speed_target):
         delta = curr_pos[:2] - prev_pos[:2]
+        direction = jnp.array([jnp.cos(angle), jnp.sin(angle)])
 
-        direction = jnp.array([
-            jnp.cos(angle),
-            jnp.sin(angle)
-        ])
+        forward_velocity = jnp.dot(delta, direction)
 
-        forward_reward = jnp.dot(delta, direction)
+        speed_error = (forward_velocity - speed_target) ** 2
 
-        # SPEED TRACKING
-        speed_pen = -(
-            (forward_reward - speed_target)
-            / (speed_target + 0.01)
-        ) ** 2
+        speed_reward = -speed_error * 1.5
 
-        # ENERGY EFFICIENCY
-        energy_penalty = -0.0001 * jnp.mean(actions ** 2)
-
-        total_reward = forward_reward + 0.2 * speed_pen + energy_penalty
-
-        return total_reward, forward_reward, speed_pen, energy_penalty
+        return (forward_velocity * 1) + speed_reward, forward_velocity, speed_reward
 
     def build_obs_angle(self, env_state, angle, sector=0, speed=1.0):
         obs = env_state.observations
@@ -156,7 +138,7 @@ class BaseNNController(Controller, ABC):
             return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0, 0))(keys, params, angles, speeds, norm_speeds)
 
         for iteration in range(1000):
-            if iteration % 50 == 0 and iteration != 0:
+            if iteration % 100 == 0 and iteration != 0:
                 self.params = params
                 self.save_controller(self.logger, f"controller_{iteration}")
             print(f"Starting iteration {iteration}")
@@ -167,15 +149,8 @@ class BaseNNController(Controller, ABC):
             
             # Interpoleer tussen bekende speeds voor betere generalisatie
             max_speed = self.speeds[-1]
-            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds)-4,), minval=0.01, maxval=1.0)
-            norm_speeds_random = jnp.concatenate([
-                norm_speeds_random,
-                jnp.ones(4)
-            ])
+            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds),), minval=0.01, maxval=1.0)
             speeds_random = norm_speeds_random * max_speed  # echte m/s in simulator voor reward
-            print("MAX: ", max_speed)
-            print("NORM: ", norm_speeds_random)
-            print("SIM: ", speeds_random)
             traj = rollout_many(subkey, params, arm_angles, speeds_random, norm_speeds_random)  # consistent!
 
             (
@@ -186,7 +161,6 @@ class BaseNNController(Controller, ABC):
                 all_rew,
                 all_forward_rewards,
                 all_speed_penalties,
-                all_action_penalties,
             ) = traj
 
             obs_buf = all_obs.reshape(-1, all_obs.shape[-1])
@@ -233,16 +207,14 @@ class BaseNNController(Controller, ABC):
 
             total_forward_reward = jnp.sum(all_forward_rewards)
             total_speed_penalty = jnp.sum(all_speed_penalties)
-            total_action_penalty = jnp.sum(all_action_penalties)
 
             log_data = {
                 "total_reward": jnp.sum(rew_buf),
                 "average_reward": jnp.sum(rew_buf) / len(arm_angles),
                 "average_reward_per_step": jnp.sum(rew_buf) / len(rew_buf),
                 "average_return": jnp.mean(returns),
-                "avg_forward_reward": total_forward_reward/len(rew_buf),
-                "avg_speed_reward": total_speed_penalty/len(rew_buf),
-                "avg_action_penalty": total_action_penalty/len(rew_buf),
+                "avg_forward_reward_per_step": total_forward_reward/len(rew_buf),
+                "avg_speed_reward_per_step": total_speed_penalty/len(rew_buf),
                 "average_advantage": jnp.mean(advantages),
             }
 
@@ -285,7 +257,7 @@ class BaseNNController(Controller, ABC):
                 env_state = env.step(action_world, env_state)
 
                 curr_pos = env_state.observations["disk_position"]
-                reward, forward_reward, speed_reward, action_penalty = self.angle_reward(prev_pos, curr_pos, angle, speed, action_world)
+                reward, forward_reward, speed_reward = self.angle_reward(prev_pos, curr_pos, angle, speed, action_world)
 
                 return (env_state, rng), (
                     x,
@@ -295,7 +267,6 @@ class BaseNNController(Controller, ABC):
                     reward,
                     forward_reward,
                     speed_reward,
-                    action_penalty,
                 )
 
             init = (env.reset(rng), rng)

@@ -47,15 +47,18 @@ def render_saved_controller(controller_path: str):
     frames = []
     i = 0
     j = 0
+    d = 2
+    x = 0.0 #d * np.cos(np.deg2rad(36))
+    y = -4.0 #d * np.sin(np.deg2rad(36))
     control_inputs = [
-        [2.0,0.0], [-2.0,-2.0], [0.0,0.0]
+        [x,y],
     ]
     reward = 0.0
     tracking_r = 0.0
     prev_pos = jnp.array([0.0,0.0])
     target = 0.003644313
     velocity_err = 0.0
-    while i < len(control_inputs) and j < 1000:
+    while i < len(control_inputs) and j < 800:
         env_state = env_state
         actions = controller.act(
             cpg_state, control_inputs[i], configuration, env_state
