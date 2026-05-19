@@ -1,6 +1,6 @@
 # SEL3 - Group 3: Brittle Star Robot
 
-A locomotion control project for a simulated brittle star robot, developed as part of the Software Engineering Lab 3 course at Ghent University.
+A locomotion control project for a simulated brittle star robot, developed as part of the [Software Engineering Lab 3](https://studiekiezer.ugent.be/studiefiche/nl/C004072/2025) course at Ghent University.
 
 ## Overview
 
@@ -9,6 +9,17 @@ The brittle star is a five-armed marine animal capable of flexible, multi-direct
 - **Map-Elites**: an evolutionary algorithm that generates a diverse archive of locomotion gaits using a Central Pattern Generator (CPG)
 - **Behavioral Cloning (BC)**: a neural network is pretrained by imitating the best gaits from the archive
 - **PPO**: the pretrained network is further fine-tuned using Proximal Policy Optimization, a reinforcement learning algorithm
+
+## Set up
+
+```bash
+python -m venv venv
+
+source venv/bin/activate
+
+pip install -r requirements.txt -c constraints.txt
+``` 
+
 
 ## Usage
 
