@@ -44,4 +44,17 @@ class FullyConnectedSymmetricCPGGenerator(CPGGenerator):
         return outputs
 
     def modulate_symmetric_rotation(self, cpg_state: CPGState, clockwise_rotations: int) -> CPGState:
-        raise Exception("Not implemented")
+        # 30 oscillators = 5 arms × 3 segments × 2 directions → 6 oscillators per arm
+        shift = 6 * clockwise_rotations
+
+        def permute_vec(x):
+            return jnp.roll(x, shift)
+
+        def permute_mat(x):
+            return jnp.roll(jnp.roll(x, shift, axis=0), shift, axis=1)
+
+        return cpg_state.replace(
+            amplitude_goals=permute_vec(cpg_state.amplitude_goals),
+            offset_goals=permute_vec(cpg_state.offset_goals),
+            coupled_phase_biases=permute_mat(cpg_state.coupled_phase_biases),
+        )

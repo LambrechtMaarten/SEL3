@@ -1,0 +1,13 @@
+/kyukon/data/gent/451/vsc45194/venvs/sel3_joltik/lib/python3.11/site-packages/glfw/__init__.py:917: GLFWError: (65550) b'X11: The DISPLAY environment variable is missing'
+  warnings.warn(message, GLFWError)
+Traceback (most recent call last):
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/src/main.py", line 14, in <module>
+    from configs.subcontrollers.register import register
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/configs/subcontrollers/register.py", line 1, in <module>
+    import configs.subcontrollers.controller.registration as controller
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/configs/subcontrollers/controller/registration.py", line 5, in <module>
+    from src.controller.network_controller import NetworkController
+  File "/kyukon/home/gent/451/vsc45194/SEL3-2026-Groep-3/src/controller/network_controller.py", line 231
+    coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: keyword argument repeated: coupled_phase_biases

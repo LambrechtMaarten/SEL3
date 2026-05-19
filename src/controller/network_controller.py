@@ -1,7 +1,8 @@
 from pathlib import Path
-from typing import Callable
+from typing import Optional
 
 import flax.linen as nn
+import flax.serialization
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -11,9 +12,9 @@ from configs.subconfigurations.logger.logger import Logger
 from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState
-from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
 
+# Vijf natuurlijke richtingen (symmetrie van de brittle star)
 NATURAL_DIRECTIONS = [
     0.0,  # 0°   arm 0 leidt
     2 * jnp.pi / 5,  # 72°  arm 1 leidt
@@ -22,13 +23,7 @@ NATURAL_DIRECTIONS = [
     8 * jnp.pi / 5,  # 288° arm 4 leidt
 ]
 
-TRAINING_DIRECTIONS = [
-    (ControlInput.RIGHT, 0.0),
-    (ControlInput.UP, jnp.pi / 2),
-    (ControlInput.LEFT, jnp.pi),
-    (ControlInput.DOWN, 3 * jnp.pi / 2),
-]
-
+# Voor manuele besturing via ControlInput (bijv. keyboard / UI)
 CONTROL_INPUT_TO_ANGLE = {
     ControlInput.RIGHT: 0.0,
     ControlInput.UP: jnp.pi / 2,
@@ -37,73 +32,19 @@ CONTROL_INPUT_TO_ANGLE = {
 }
 
 
-class CPGNetwork(nn.Module):
-    """Small MLP that maps a direction vector to CPG parameters.
-
-    Attributes:
-        num_cpg_params: Number of CPG parameters to output, determined
-            by the CPG generator and morphology configuration.
-    """
-
-    num_cpg_params: int
-
-    @nn.compact
-    def __call__(self, x: jarr) -> jarr:
-        """Forward pass through the network.
-
-        Args:
-            x: Input vector of shape (2,) containing [cos(θ), sin(θ)].
-
-        Returns:
-            JAX array of shape (num_cpg_params,) with CPG parameters.
-        """
-        x = nn.Dense(64)(x)
-        x = nn.tanh(x)
-        x = nn.Dense(64)(x)
-        x = nn.tanh(x)
-        x = nn.Dense(self.num_cpg_params)(x)
-        return x
-
-
 def angle_to_vector(theta: float) -> jarr:
-    """Converts a direction angle to a unit vector.
-
-    Args:
-        theta: Direction angle in radians.
-
-    Returns:
-        JAX array of shape (2,) containing [cos(θ), sin(θ)].
-    """
+    """Converts a direction angle to a unit vector [cos θ, sin θ]."""
     return jnp.array([jnp.cos(theta), jnp.sin(theta)])
 
 
 def flatten_params(params) -> jarr:
-    """Flattens a nested parameter dict into a single array.
-
-    Args:
-        params: Nested parameter dictionary from Flax.
-
-    Returns:
-        Flat JAX array containing all network weights.
-    """
+    """Flattens a nested parameter dict into a single array."""
     leaves, _ = jax.tree_util.tree_flatten(params)
     return jnp.concatenate([leaf.ravel() for leaf in leaves])
 
 
 def make_unflatten_fn(template):
-    """Creates a function that unflattens a flat array into a parameter structure.
-
-    By pre-computing the sizes and treedef outside of vmap, the returned
-    function only uses concrete Python integers for slicing, which is
-    compatible with jax.vmap and jax.jit.
-
-    Args:
-        template: Template parameter structure from Flax init.
-
-    Returns:
-        A function that takes a flat JAX array and returns a nested
-        parameter dictionary matching the template structure.
-    """
+    """Creates a function that unflattens a flat array into a parameter structure."""
     leaves, treedef = jax.tree_util.tree_flatten(template)
     sizes = [int(np.prod(np.array(leaf.shape))) for leaf in leaves]
     shapes = [leaf.shape for leaf in leaves]
@@ -119,49 +60,144 @@ def make_unflatten_fn(template):
     return unflatten
 
 
-class NetworkController(Controller):
-    """Controller that uses a neural network to map directions to CPG parameters.
+def extract_state_from_cpg(cpg_state: CPGState) -> jarr:
+    """Extracts a compact state vector from the CPG state.
 
-    Instead of storing discrete CPG configurations per direction, this
-    controller trains a small MLP that takes a direction vector as input
-    and outputs CPG parameters directly. This allows continuous interpolation
-    between directions — any angle θ works, not just the trained directions.
+    Voor nu gebruiken we de afgevlakte CPG-outputs als interne state.
+    Dit kan later uitgebreid worden met environment-observaties.
+    """
+    return cpg_state.outputs.ravel()
 
-    Training happens in two phases:
-        1. Pre-training: gradient descent on the 5 natural directions of
-           the brittle star using the known optimal CPG parameters rotated
-           via symmetry.
-        2. Genetic optimization: fine-tuning the network weights to
-           interpolate correctly for the 4 cardinal directions.
+
+class CPGNetwork(nn.Module):
+    """Kleine MLP die (richting, state) naar CPG-parameters mappt.
+
+    In plaats van enkel een richtingsvector te gebruiken, neemt dit netwerk
+    ook een state-vector van de brittle star als input. Zo kan het netwerk
+    rekening houden met de huidige toestand (bijv. fase, houding) bij het
+    kiezen van CPG-parameters.
 
     Attributes:
-        network: The CPGNetwork MLP instance.
-        weights: The trained network weights as a flat array, or None
-            before training.
-        _template_params: Template parameter structure used for
-            flattening and unflattening the genome.
+        num_cpg_params: Aantal CPG-parameters in de output.
+        state_dim: Dimensie van de state-vector.
+    """
+
+    num_cpg_params: int
+    state_dim: int
+
+    @nn.compact
+    def __call__(self, direction_vec: jarr, speed: jarr, state_vec: jarr) -> jarr:
+        """Forward pass.
+
+        Args:
+            direction_vec: JAX array van vorm (2,) met [cos θ, sin θ].
+            speed: JAX array van vorm (1,) met genormaliseerde snelheid [0, 1].
+            state_vec: JAX array van vorm (state_dim,) met de huidige state.
+
+        Returns:
+            JAX array van vorm (num_cpg_params,) met CPG-parameters.
+        """
+        x = jnp.concatenate([direction_vec, speed, state_vec], axis=-1)
+        x = nn.Dense(128)(x)
+        x = nn.tanh(x)
+        x = nn.Dense(128)(x)
+        x = nn.tanh(x)
+        x = nn.Dense(self.num_cpg_params)(x)
+        return x
+
+
+class NetworkController(Controller):
+    """State-afhankelijke controller voor RL: (θ, CPG-state) → CPG-parameters.
+
+    Deze controller bevat:
+        - een CPGNetwork dat richting + state naar CPG-parameters mappt;
+        - een init-logica om het netwerk op te zetten;
+        - optionele pre-training op de 5 natuurlijke richtingen via symmetrie;
+        - een act()-functie voor manuele besturing (ControlInput).
+
+    RL (PPO, SAC, …) draait buiten deze klasse en optimaliseert de netwerk-
+    parameters op basis van reward (bijv. projectie van verplaatsing op
+    gewenste richting).
     """
 
     def __init__(self):
-        """Initializes the controller with no trained weights."""
-        self.network: CPGNetwork | None = None
-        self.weights = None
+        self.network: Optional[CPGNetwork] = None
         self._template_params = None
+        self._state_dim: Optional[int] = None
+        # Voor manuele besturing / runtime gebruik:
+        self.weights: Optional[jarr] = None  # flatten_params van params
 
     def _init_network(self, configuration: Configuration):
-        """Lazily initializes the network if not already done.
-
-        Args:
-            configuration: The current training configuration, used to
-                determine the number of CPG parameters.
-        """
+        """Initialiseert het netwerk en template-parameters als dat nog niet gebeurd is."""
         if self.network is not None:
             return
+
         cpg_generator = configuration.cpg.cpg_generator
         cpg = cpg_generator.generate(configuration)
-        num_cpg_params = cpg_generator.body_to_jarr(cpg.reset()).size
-        self.network = CPGNetwork(num_cpg_params=num_cpg_params)
-        self._template_params = self.network.init(jax.random.PRNGKey(0), jnp.zeros(2))
+        cpg_state = cpg.reset()
+
+        num_cpg_params = cpg_generator.body_to_jarr(cpg_state).size
+        state_dim = extract_state_from_cpg(cpg_state).size
+        self._state_dim = int(state_dim)
+
+        self.network = CPGNetwork(
+            num_cpg_params=num_cpg_params,
+            state_dim=self._state_dim,
+        )
+        self._template_params = self.network.init(
+            jax.random.PRNGKey(0),
+            jnp.zeros(2),
+            jnp.zeros(1),
+            jnp.zeros(self._state_dim),
+        )
+
+    # ---------- RL-gerelateerde helpers ----------
+
+    def init_params(self, configuration: Configuration, rng: jarr) -> dict:
+        """Geeft een nieuw, random geïnitialiseerd parameter-PyTree terug voor RL.
+
+        RL-algoritmes (PPO, SAC, …) kunnen deze params gebruiken als startpunt
+        en ze verder optimaliseren op basis van reward.
+        """
+        self._init_network(configuration)
+        assert self.network is not None
+        assert self._state_dim is not None
+
+        params = self.network.init(
+            rng,
+            jnp.zeros(2),
+            jnp.zeros(1),
+            jnp.zeros(self._state_dim),
+        )
+        return params
+
+    def policy_apply(
+        self,
+        params: dict,
+        theta: float,
+        speed: float,
+        cpg_state: CPGState,
+    ) -> jarr:
+        """Pure policy-call voor RL: (params, θ, speed, CPG-state) → CPG-parameters.
+
+        Args:
+            params: netwerkparameters.
+            theta: gewenste bewegingsrichting in radialen.
+            speed: genormaliseerde snelheid [0, 1] (1 = maximale snelheid).
+            cpg_state: huidige CPG-toestand.
+
+        De RL-omgeving kan daarna:
+            - cpg_state = modulate_body(cpg_state, cpg_params)
+            - cpg_state = cpg.step(cpg_state)
+            - env_state = env.step(actions)
+        """
+        assert self.network is not None
+        direction_vec = angle_to_vector(theta)
+        speed_vec = jnp.array([speed])
+        state_vec = extract_state_from_cpg(cpg_state)
+        return self.network.apply(params, direction_vec, speed_vec, state_vec)
+
+    # ---------- Supervised pre-training (optioneel) ----------
 
     def pretrain_from_cpg(
         self,
@@ -170,32 +206,26 @@ class NetworkController(Controller):
         learning_rate: float = 0.01,
         steps: int = 1000,
     ):
-        """Pre-trains the network on the 5 natural directions using symmetry.
+        """Pre-traint het netwerk op de 5 natuurlijke richtingen via symmetrie.
 
-        Uses the known RIGHT solution and rotates it for each of the 5
-        natural directions of the brittle star (every 72°). The network
-        learns to map each natural direction to the correct CPG parameters
-        before the genetic optimization starts.
-
-        After this pre-training, the genetic optimization will fine-tune
-        the network to interpolate between the natural directions for the
-        4 cardinal directions.
-
-        Args:
-            cpg_params_right: The flat CPG parameter array for the RIGHT
-                direction, loaded from a previously trained controller.
-            configuration: The current training configuration.
-            learning_rate: Learning rate for Adam optimizer.
-            steps: Number of gradient descent steps.
+        We gebruiken de bekende RIGHT-oplossing en roteren die voor elke
+        natuurlijke richting (elke 72°). Het netwerk leert om elke natuurlijke
+        richting naar de juiste CPG-parameters te mappen, gegeven een neutrale
+        state-vector (nulvector). Dit is een eerste stap; RL kan hierna
+        fine-tunen op echte rollouts met reward.
         """
         import optax
 
         self._init_network(configuration)
+        assert self._state_dim is not None
+        assert self.network is not None
+
         cpg_generator = configuration.cpg.cpg_generator
         cpg = cpg_generator.generate(configuration)
 
-        # Bouw training pairs voor de 5 natuurlijke richtingen
+        # Bouw training pairs voor de 5 natuurlijke richtingen (speed=1.0: max snelheid)
         training_pairs = []
+        speed_vec = jnp.ones(1)
         for i, theta in enumerate(NATURAL_DIRECTIONS):
             direction_vector = angle_to_vector(theta)
 
@@ -208,18 +238,18 @@ class NetworkController(Controller):
                 coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
             )
             rotated_params = cpg_generator.body_to_jarr(rotated_state)
-            training_pairs.append((direction_vector, rotated_params))
+
+            state_vec = jnp.zeros(self._state_dim)
+            training_pairs.append((direction_vector, speed_vec, state_vec, rotated_params))
             print(f"Richting {i} ({float(jnp.degrees(theta)):.1f}°): params klaar")
 
-        # Loss = MSE over alle 5 richtingen
         def loss_fn(params):
             total_loss = 0.0
-            for direction_vector, target_params in training_pairs:
-                output = self.network.apply(params, direction_vector)
+            for direction_vector, speed_vec, state_vec, target_params in training_pairs:
+                output = self.network.apply(params, direction_vector, speed_vec, state_vec)
                 total_loss += jnp.mean((output - target_params) ** 2)
             return total_loss / len(training_pairs)
 
-        # Gradient descent via Adam
         optimizer = optax.adam(learning_rate)
         params = self._template_params
         opt_state = optimizer.init(params)
@@ -241,24 +271,137 @@ class NetworkController(Controller):
         self.weights = flatten_params(params)
         print("Pre-training voltooid!")
 
+    def pretrain_from_archive(
+        self,
+        archive_path: str,
+        configuration: Configuration,
+        min_displacement: float = 0.2,
+        learning_rate: float = 0.01,
+        steps: int = 1000,
+    ):
+        """Pre-traint het netwerk op alle gaits uit een map-elites archief.
+
+        Elke gait heeft een x-verplaatsing die de snelheid aangeeft en het
+        teken geeft de richting (positief = rechts, negatief = links).
+        Elke gait wordt geroteerd naar alle 5 richtingen, wat resulteert in
+        N × 5 trainingsparen met diverse (richting, snelheid) combinaties.
+
+        Args:
+            archive_path: pad naar de map met selections.npy en x_positions.npy.
+            configuration: trainings-configuratie.
+            min_displacement: minimale |x|-verplaatsing om een gait te gebruiken.
+            learning_rate: leersnelheid voor Adam.
+            steps: aantal BC-updateslagen.
+        """
+        import optax
+        from pathlib import Path
+
+        self._init_network(configuration)
+        assert self._state_dim is not None
+        assert self.network is not None
+
+        cpg_generator = configuration.cpg.cpg_generator
+        cpg = cpg_generator.generate(configuration)
+
+        # Laad archief
+        archive = Path(archive_path)
+        selections = np.load(archive / "selections.npy")    # (N, genome_size)
+        x_positions = np.load(archive / "x_positions.npy") # (N,)
+
+        # Filter gaits die nauwelijks bewegen (x ≈ 0 = richting onbekend)
+        mask = np.abs(x_positions) > min_displacement
+        filtered_selections = selections[mask]
+        filtered_x = x_positions[mask]
+
+        if len(filtered_selections) == 0:
+            raise ValueError(f"Geen gaits gevonden met |x_position| > {min_displacement}.")
+
+        # Normaliseer snelheid op basis van maximale absolute x-verplaatsing
+        max_abs_x = float(np.abs(filtered_x).max())
+        speeds_normalized = np.abs(filtered_x) / max_abs_x  # [0, 1]
+
+        # Basisrichting per gait: 0° voor rechts (x>0), π voor links (x<0)
+        base_rotations = np.where(filtered_x > 0, 0, len(NATURAL_DIRECTIONS) // 2)
+
+        print(f"Archief geladen: {len(selections)} gaits totaal, "
+              f"{len(filtered_selections)} gebruikt (|x| > {min_displacement}), "
+              f"snelheidsbereik=[{speeds_normalized.min():.2f}, {speeds_normalized.max():.2f}].")
+
+        # Bouw training pairs: elke gait × 5 richtingen, met eigen snelheid
+        training_pairs = []
+        for gait_params, speed, base_rot in zip(filtered_selections, speeds_normalized, base_rotations):
+            speed_vec = jnp.array([float(speed)])
+            cpg_state = cpg_generator.modulate_body(cpg.reset(), jnp.array(gait_params))
+
+            for i in range(len(NATURAL_DIRECTIONS)):
+                # Roteer relatief t.o.v. de basisrichting van de gait
+                k = (i + int(base_rot)) % len(NATURAL_DIRECTIONS)
+                theta = NATURAL_DIRECTIONS[i]
+                direction_vector = angle_to_vector(theta)
+
+                perm = jnp.roll(jnp.arange(10), shift=k * 2)
+                rotated_state = cpg_state.replace(
+                    amplitude_goals=cpg_state.amplitude_goals[perm],
+                    offset_goals=cpg_state.offset_goals[perm],
+                    coupled_phase_biases=cpg_state.coupled_phase_biases[perm][:, perm],
+                )
+                rotated_params = cpg_generator.body_to_jarr(rotated_state)
+                state_vec = jnp.zeros(self._state_dim)
+                training_pairs.append((direction_vector, speed_vec, state_vec, rotated_params))
+
+        print(f"{len(training_pairs)} trainingsparen aangemaakt "
+              f"({len(filtered_selections)} gaits × 5 richtingen).")
+
+        def loss_fn(params):
+            total_loss = 0.0
+            for direction_vector, speed_vec, state_vec, target_params in training_pairs:
+                output = self.network.apply(params, direction_vector, speed_vec, state_vec)
+                total_loss += jnp.mean((output - target_params) ** 2)
+            return total_loss / len(training_pairs)
+
+        optimizer = optax.adam(learning_rate)
+        params = self._template_params
+        opt_state = optimizer.init(params)
+
+        @jax.jit
+        def step(params, opt_state):
+            loss, grads = jax.value_and_grad(loss_fn)(params)
+            updates, new_opt_state = optimizer.update(grads, opt_state)
+            new_params = optax.apply_updates(params, updates)
+            return new_params, new_opt_state, loss
+
+        print(f"Start BC pre-training ({steps} stappen)...")
+        for i in range(steps):
+            params, opt_state, loss = step(params, opt_state)
+            if i % 100 == 0:
+                print(f"  Stap {i:4d}/{steps}: loss = {float(loss):.6f}", flush=True)
+
+        self._template_params = params
+        self.weights = flatten_params(params)
+        print("BC pre-training vanuit archief voltooid!")
+
+    # ---------- Runtime-act voor manuele besturing ----------
+
     def act(
         self,
         cpg_state: CPGState,
         control_input: ControlInput,
         configuration: Configuration,
+        speed: float = 1.0,
     ) -> CPGState:
-        """Modulates the CPG state using the network output for the given direction.
+        """Moduleert de CPG-state met netwerkoutput voor de gegeven richting + state.
 
-        Args:
-            cpg_state: The current CPG state.
-            control_input: The directional input to respond to.
-            configuration: The current training configuration.
+        Dit is vooral bedoeld voor manuele besturing (bijv. keyboard):
+        - ControlInput.ZZZ → neutrale CPG-configuratie
+        - andere inputs → richting naar [cos θ, sin θ], gecombineerd met
+          de huidige CPG-state, door het netwerk gestuurd naar CPG-parameters.
 
-        Returns:
-            A new CPGState modulated with the network's CPG parameters
-            for the given direction, or a zeroed modulation for ControlInput.ZZZ.
+        Voor RL gebruik je in plaats hiervan policy_apply() met een θ die
+        per episode gesampled wordt.
         """
         self._init_network(configuration)
+        assert self._state_dim is not None
+
         cpg_generator = configuration.cpg.cpg_generator
 
         if control_input == ControlInput.ZZZ:
@@ -269,153 +412,55 @@ class NetworkController(Controller):
                 ),
             )
 
+        if self.params is None:
+            raise RuntimeError(
+                "NetworkController.act werd aangeroepen zonder geladen/ingestelde params."
+            )
+
         theta = CONTROL_INPUT_TO_ANGLE.get(control_input, 0.0)
         direction_vector = angle_to_vector(theta)
-        unflatten = make_unflatten_fn(self._template_params)
-        params = unflatten(self.weights)
-        cpg_params = self.network.apply(params, direction_vector)
+        speed_vec = jnp.array([speed])
+        state_vec = extract_state_from_cpg(cpg_state)
+
+        cpg_params = self.network.apply(self.params, direction_vector, speed_vec, state_vec)
         return cpg_generator.modulate_body(cpg_state, cpg_params)
 
-    def train_controller(
-        self,
-        genetic_selections: jarr,
-        genetic_evaluations: jarr,
-        configuration: Configuration,
-    ):
-        """Stores the best genome (network weights) from the genetic selections.
-
-        Args:
-            genetic_selections: JAX array of selected genomes from the
-                final generation.
-            genetic_evaluations: JAX array of fitness scores corresponding
-                to each selection.
-            configuration: The current training configuration.
-        """
-        self._init_network(configuration)
-        best_idx = jnp.argmax(genetic_evaluations)
-        self.weights = genetic_selections[best_idx]
-
-    @staticmethod
-    def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:
-        """Returns a fitness function that evaluates the network across all directions.
-
-        For each genome (network weights) in the population, simulates
-        the brittle star in all training directions and sums the scores.
-        Uses jax.vmap to evaluate the full population in parallel.
-
-        Args:
-            configuration: The current training configuration.
-            rng: A JAX random key for environment reset.
-
-        Returns:
-            A callable that maps a population array of shape
-            (population_size, genome_size) to a fitness array of
-            shape (population_size,).
-        """
-        TRAINING_THETAS = jnp.array([theta for _, theta in TRAINING_DIRECTIONS])
-        cpg_generator = configuration.cpg.cpg_generator
-        cpg_template = cpg_generator.generate(configuration)
-        num_cpg_params = cpg_generator.body_to_jarr(cpg_template.reset()).size
-
-        dummy_network = CPGNetwork(num_cpg_params=num_cpg_params)
-        template_params = dummy_network.init(jax.random.PRNGKey(0), jnp.zeros(2))
-        unflatten = make_unflatten_fn(template_params)
-
-        def evaluator(arr: jarr) -> jarr:
-            """Evaluates all genomes across all training directions.
-
-            Args:
-                arr: Population array of shape (population_size, genome_size).
-
-            Returns:
-                Fitness array of shape (population_size,).
-            """
-            env = Environment(configuration)
-
-            def _evaluate_genome(flat_weights: jarr, _rng: jarr) -> float:
-                params = unflatten(flat_weights)
-
-                def eval_direction(theta, rng):
-                    rng, subkey = jax.random.split(rng)
-                    env_state = env.reset(subkey)
-
-                    cpg = cpg_generator.generate(configuration)
-                    direction_vector = angle_to_vector(theta)
-                    cpg_params = dummy_network.apply(params, direction_vector)
-                    cpg_state = cpg_generator.modulate_body(cpg.reset(), cpg_params)
-
-                    start_x = env_state.observations["disk_position"][0]
-                    start_y = env_state.observations["disk_position"][1]
-                    expected_dx = jnp.cos(theta)
-                    expected_dy = jnp.sin(theta)
-
-                    def step_fn(i, val):
-                        cpg_state, env_state, score = val
-                        cpg_state = cpg.step(cpg_state)
-                        env_state = env.step(
-                            cpg_generator.outputs_to_actions(
-                                cpg_state.outputs, configuration
-                            ),
-                            env_state,
-                        )
-                        dx = env_state.observations["disk_position"][0] - start_x
-                        dy = env_state.observations["disk_position"][1] - start_y
-                        score = score + dx * expected_dx + dy * expected_dy
-                        return cpg_state, env_state, score
-
-                    _, _, score = jax.lax.fori_loop(
-                        0, 800, step_fn, (cpg_state, env_state, 0.0)
-                    )
-
-                    return score
-
-                # split rng per direction
-                rngs = jax.random.split(_rng, TRAINING_THETAS.shape[0])
-
-                # Evaluate over all training directions
-                scores = jax.lax.map(
-                    lambda args: eval_direction(*args), (TRAINING_THETAS, rngs)
-                )
-
-                return jnp.sum(scores)
-
-            return jax.vmap(_evaluate_genome)(arr, jax.random.split(rng, arr.shape[0]))
-
-        return evaluator
+    # ---------- Nutsfuncties ----------
 
     def genome_size(self, configuration: Configuration) -> int:
-        """Returns the total number of network weights.
+        """Geeft het totaal aantal netwerkparameters terug.
 
-        Args:
-            configuration: The current training configuration.
-
-        Returns:
-            Total number of parameters in the CPGNetwork.
+        Handig als je RL-params als flat vector wil opslaan/loggen.
         """
         self._init_network(configuration)
         return flatten_params(self._template_params).size
 
     def save_controller(self, logger: Logger):
-        """Saves the trained network weights via the logger.
+        """Slaat de huidige netwerkgewichten (self.weights) op via de logger.
 
-        Args:
-            logger: The logger to write the network weights to.
+        Let op: dit gebruikt de flatten-versie (handig voor logging / snapshots).
+        Voor RL kun je ook rechtstreeks het PyTree van params opslaan.
         """
+        if self.weights is None:
+            raise RuntimeError("Geen weights om op te slaan in NetworkController.")
 
         flat = np.array(self.weights)
         path = Path(logger.base_folder) / "controller"
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Schrijf direct naar bestand, omzeil logger volledig
         with open(path, "w") as f:
             f.write(" ".join([f"{x:.8f}" for x in flat.ravel()]))
 
     def read_controller(self, path: str):
-        """Loads previously trained network weights from a file.
+        with open(path, "rb") as f:
+            bytes_data = f.read()
 
-        Args:
-            path: Path to the file containing the network weights.
-        """
-        with open(path, "r") as f:
-            values = f.read().split()
-            self.weights = jnp.array([float(x) for x in values if x])
+        self.params = flax.serialization.from_bytes(self._template_params, bytes_data)
+
+    def evaluator(self, *args, **kwargs):
+        raise NotImplementedError("Evaluator is removed; use RL training instead.")
+
+    def train_controller(self, *args, **kwargs):
+        raise NotImplementedError(
+            "Genetic training is removed; use RL training instead."
+        )
