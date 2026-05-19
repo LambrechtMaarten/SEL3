@@ -28,15 +28,6 @@ class Controller(ABC):
     ) -> CPGState:
         pass
 
-    @abstractmethod
-    def train_controller(
-        self,
-        genetic_selections: jarr,
-        genetic_evaluations: jarr,
-        configuration: Configuration,
-    ):
-        pass
-
     @staticmethod
     @abstractmethod
     def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:

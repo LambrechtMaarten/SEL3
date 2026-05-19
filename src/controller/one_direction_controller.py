@@ -32,14 +32,6 @@ class OneDirectionController(Controller):
         cpg_generator = configuration.cpg.cpg_generator
         return cpg_generator.modulate_body(cpg_state, self.body_cpg)
 
-    def train_controller(
-        self,
-        genetic_selections: jarr,
-        genetic_evaluations: jarr,
-        configuration: Configuration,
-    ):
-        self.body_cpg = genetic_selections[jnp.argmax(genetic_evaluations)]
-
     @staticmethod
     def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:
         def evaluator(arr: jarr) -> jarr:
