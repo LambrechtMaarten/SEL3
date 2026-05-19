@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 import pickle
 from pathlib import Path
 
@@ -46,7 +45,7 @@ class ActorCritic(nn.Module):
 
         return dist, jnp.squeeze(value, axis=-1)
 
-class BaseNNController(Controller, ABC):
+class BaseNNController(Controller):
     def __init__(self, action_dim):
         self.action_dim = action_dim
         self.params = None
@@ -59,10 +58,6 @@ class BaseNNController(Controller, ABC):
         self.epochs = 6
         self.speeds = []
         self.norm_speeds = []
-
-    @abstractmethod
-    def act(self, cpg_state, control_input, configuration, env_state):
-        pass
 
     @staticmethod
     def evaluator(configuration, rng):
