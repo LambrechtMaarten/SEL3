@@ -21,8 +21,3 @@ def register():
         CPGConfiguration,
         CPGConfiguration("symmetric", FullyConnectedSymmetricCPGGenerator()),
     )
-
-    SubConfigurationMap.add_configuration(
-        CPGConfiguration,
-        CPGConfiguration("symmetric", FullyConnectedSymmetricCPGGenerator()),
-    )
