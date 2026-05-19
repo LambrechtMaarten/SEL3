@@ -1,6 +1,10 @@
 import jax.numpy as jnp
 import numpy as np
 
+from moojoco.environment.base import BaseEnvState
+
+from configs.config import Configuration
+from src.cpg.cpg_state import CPGState
 from src.controller.NN_controller_pretrain import NNControllerPretrain
 from src.controller.control_input import ControlInput
 
@@ -8,7 +12,7 @@ class NNControllerAngle(NNControllerPretrain):
     def __init__(self):
         super().__init__()
 
-    def act(self, cpg_state, control_input: ControlInput, configuration, env_state):
+    def act(self, cpg_state: CPGState, control_input: ControlInput, configuration: Configuration, env_state: BaseEnvState):
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
         deltas = jnp.array(control_input) - robot_pos

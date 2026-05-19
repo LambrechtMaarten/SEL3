@@ -2,7 +2,6 @@ import pickle
 from pathlib import Path
 
 from typing import Any, Callable, Tuple
-from src.jax_extra.jax_extra import jarr
 
 import distrax
 import flax.linen as nn
@@ -20,6 +19,31 @@ from configs.subconfigurations.logger.logger import Logger
 from src.controller.control_input import ControlInput
 from src.cpg.cpg_state import CPGState
 from src.jax_extra.jax_extra import jarr
+
+def ppo_loss(
+    params: Any,
+    model: nn.Module,
+    batch: tuple[jarr, jarr, jarr, jarr, jarr],
+    clip_eps: float = 0.2,
+    vf_coef: float = 0.5,
+    ent_coef: float = 0.01,
+) -> jarr:    
+    obs, actions, old_log_probs, returns, advantages = batch
+
+    dist, values = model.apply(params, obs)
+    log_probs = dist.log_prob(actions)
+
+    ratio = jnp.exp(log_probs - old_log_probs)
+
+    clipped = jnp.clip(ratio, 1.0 - clip_eps, 1.0 + clip_eps)
+
+    policy_loss = -jnp.mean(jnp.minimum(ratio * advantages, clipped * advantages))
+
+    value_loss = jnp.mean((returns - values) ** 2)
+
+    entropy = jnp.mean(dist.entropy())
+
+    return policy_loss + vf_coef * value_loss - ent_coef * entropy
 
 def update_step(
     params: Any,
@@ -125,7 +149,7 @@ class BaseNNController(Controller):
         
         return (local_angle, k_idx)
     
-    def get_speeds(self, rng):
+    def get_speeds(self):
         n = 15
         max_speed = 0.0036
         if len(self.speeds) > 0:
@@ -172,9 +196,9 @@ class BaseNNController(Controller):
                 self.params = params
                 self.save_controller(self.logger, f"controller_{iteration}")
 
-            rng, subkey, angle_key, speed_key, speed_key2 = jax.random.split(rng, 5)
+            rng, subkey, angle_key, speed_key2 = jax.random.split(rng, 4)
 
-            n, max_speed = self.get_speeds(speed_key)
+            n, max_speed = self.get_speeds()
 
             # Wereldframe doelhoek: volledig random over 360°
             arm_angles = jax.random.uniform(angle_key, shape=(n,), minval=0.0, maxval=2*jnp.pi)
@@ -375,30 +399,3 @@ class BaseNNController(Controller):
 
         # Directe joint actions geen CPG tussenstap
         return rotated_actions
-    
-
-
-def ppo_loss(
-    params: Any,
-    model: nn.Module,
-    batch: tuple[jarr, jarr, jarr, jarr, jarr],
-    clip_eps: float = 0.2,
-    vf_coef: float = 0.5,
-    ent_coef: float = 0.01,
-) -> jarr:    
-    obs, actions, old_log_probs, returns, advantages = batch
-
-    dist, values = model.apply(params, obs)
-    log_probs = dist.log_prob(actions)
-
-    ratio = jnp.exp(log_probs - old_log_probs)
-
-    clipped = jnp.clip(ratio, 1.0 - clip_eps, 1.0 + clip_eps)
-
-    policy_loss = -jnp.mean(jnp.minimum(ratio * advantages, clipped * advantages))
-
-    value_loss = jnp.mean((returns - values) ** 2)
-
-    entropy = jnp.mean(dist.entropy())
-
-    return policy_loss + vf_coef * value_loss - ent_coef * entropy

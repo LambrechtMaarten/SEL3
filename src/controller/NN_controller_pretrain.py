@@ -1,26 +1,38 @@
 from pathlib import Path
 
 from typing import Any, Callable, Tuple
-from src.jax_extra.jax_extra import jarr
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import flax.linen as nn
+import optax
 
 from src.cpg.cpg_generators.fully_connected_symmetric_cpg_generator import FullyConnectedSymmetricCPGGenerator
 from src.environment.environment import Environment
 from src.controller.BaseNNController import BaseNNController
+from src.cpg.cpg_state import CPGState
+from src.cpg.cpg_generators.cpg_generators import CPGGenerator
+from configs.config import Configuration
+from src.jax_extra.jax_extra import jarr
 
 # === Behavioral Cloning ===
 
-def bc_loss(params, model, obs_batch, expert_actions):
+def bc_loss(params: Any, model: nn.Module, obs_batch: jarr, expert_actions: jarr) -> jarr:
     """MSE tussen policy-gemiddelde en expert-acties."""
     dist, _ = model.apply(params, obs_batch)
     return jnp.mean((dist.mean() - expert_actions) ** 2)
 
 
-def bc_update_step(params, opt_state, model, obs_batch, expert_actions, optimizer):
+def bc_update_step(
+        params: Any,
+        opt_state: optax.OptState,
+        model: nn.Module,
+        obs_batch: jarr,
+        expert_actions: jarr,
+        optimizer: optax.GradientTransformation
+    ) -> Tuple[Any, optax.OptState, jarr]:
     loss, grads = jax.value_and_grad(bc_loss)(params, model, obs_batch, expert_actions)
     updates, new_opt_state = optimizer.update(grads, opt_state)
     new_params = optax.apply_updates(params, updates)
@@ -30,8 +42,16 @@ def bc_update_step(params, opt_state, model, obs_batch, expert_actions, optimize
 bc_update_jit = jax.jit(bc_update_step, static_argnames=["model", "optimizer"])
 
 # === PPO met KL-regularisatie ===
-def ppo_loss_with_kl(params, model, batch, pretrained_params, kl_coef,
-                     clip_eps=0.2, vf_coef=0.5, ent_coef=0.01):
+def ppo_loss_with_kl(
+        params: Any,
+        model: nn.Module,
+        batch: Tuple[jarr, jarr, jarr, jarr, jarr],
+        pretrained_params: Any,
+        kl_coef: float,
+        clip_eps: float = 0.2,
+        vf_coef: float = 0.5,
+        ent_coef:float = 0.01
+    ):
     """PPO-loss met KL-divergentieterm om de policy dicht bij de pre-getrainde
     initialisatie te houden. kl_coef neemt af doorheen training (annealing)."""
     obs, actions, old_log_probs, returns, advantages = batch
@@ -52,7 +72,15 @@ def ppo_loss_with_kl(params, model, batch, pretrained_params, kl_coef,
 
     return policy_loss + vf_coef * value_loss - ent_coef * entropy + kl_coef * kl
 
-def update_step_kl(params, opt_state, model, batch, optimizer, pretrained_params, kl_coef):
+def update_step_kl(
+    params: Any,
+    opt_state: optax.OptState,
+    model: nn.Module,
+    batch: Tuple[jarr, jarr, jarr, jarr, jarr],
+    optimizer: optax.GradientTransformation,
+    pretrained_params: Any,
+    kl_coef: float,
+) -> Tuple[Any, optax.OptState, jarr]:
     loss, grads = jax.value_and_grad(ppo_loss_with_kl)(
         params, model, batch, pretrained_params, kl_coef
     )
@@ -64,13 +92,23 @@ update_step_kl_jit = jax.jit(update_step_kl, static_argnames=["model", "optimize
 
 # === Value warm-up (enkel value head trainen) ===
 
-def value_warmup_loss(params, model, batch):
+def value_warmup_loss(
+    params: Any,
+    model: nn.Module,
+    batch: Tuple[jarr, jarr, jarr, jarr, jarr],
+) -> jarr:
     obs, _, _, returns, _ = batch
     _, values = model.apply(params, obs)
     return jnp.mean((returns - values) ** 2)
 
 
-def value_warmup_step(params, opt_state, model, batch, optimizer):
+def value_warmup_step(
+    params: Any,
+    opt_state: optax.OptState,
+    model: nn.Module,
+    batch: Tuple[jarr, jarr, jarr, jarr, jarr],
+    optimizer: optax.GradientTransformation,
+) -> Tuple[Any, optax.OptState, jarr]:
     loss, grads = jax.value_and_grad(value_warmup_loss)(params, model, batch)
     updates, new_opt_state = optimizer.update(grads, opt_state)
     new_params = optax.apply_updates(params, updates)
@@ -87,7 +125,7 @@ class NNControllerPretrain(BaseNNController):
         self.kl_coef_init = jnp.array(0.1)
         self.kl_decay = jnp.array(50.0)
 
-    def train_controller(self, configuration, num_steps=1000, archive=None):
+    def train_controller(self, configuration: Configuration, num_steps=1000, archive=None):
         """Train de controller via PPO.
 
         Args:
@@ -130,7 +168,13 @@ class NNControllerPretrain(BaseNNController):
         self.logger.log(log_data)
         return params, opt_state
 
-    def _make_expert_rollout_fn(self, env, cpg_generator, cpg, configuration, num_steps):
+    def _make_expert_rollout_fn(
+            self, env: Environment,
+            cpg_generator: CPGGenerator,
+            cpg: CPGState,
+            configuration: Configuration,
+            num_steps: int
+        ) -> Callable:
         """Rollout waarbij de expert-CPG de robot bestuurt.
         Verzamelt observaties én de bijhorende joint actions voor BC."""
         def expert_rollout(rng, expert_cpg_state, angle, speed):
@@ -157,10 +201,10 @@ class NNControllerPretrain(BaseNNController):
 
         return jax.jit(expert_rollout)
 
-    def pretrain_bc_from_archive(self, configuration, archive_path,
-                                  bc_iterations=1000, warmup_iterations=20,
-                                  num_rollout_steps=500, noise_std=0.02,
-                                  bc_lr=1e-3, min_displacement=0.2, top_k=15):
+    def pretrain_bc_from_archive(self, configuration: Configuration, archive_path: str,
+                                  bc_iterations: int = 1000, warmup_iterations: int = 20,
+                                  num_rollout_steps:int = 500, noise_std: float = 0.02,
+                                  bc_lr: float = 1e-3, min_displacement: float = 0.2, top_k:int = 15):
         """BC-pretraining met meerdere expert-gaits uit een map-elites archief.
 
         Vergelijkbaar met pretrain_bc, maar gebruikt top_k gaits uit het

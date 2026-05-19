@@ -88,7 +88,7 @@ if __name__ == "__main__":
         )
 
         controller = configuration.controller.controller
-        controller.train_controller(configuration, pretrained_body_cpg=sys.argv[2])
+        controller.train_controller(configuration, archive=sys.argv[2])
         print(f"Controller opgeslagen in: {configuration.logger.base_folder}")
 
     elif sys.argv[1] == "simulate":
