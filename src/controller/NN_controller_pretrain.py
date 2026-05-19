@@ -124,6 +124,7 @@ class NNControllerPretrain(BaseNNController):
         # KL-annealing: start bij 0.1, halveert elke ~35 iteraties
         self.kl_coef_init = jnp.array(0.1)
         self.kl_decay = jnp.array(50.0)
+        self.target_angles = []
 
     def train_controller(self, configuration: Configuration, num_steps=1000, archive=None):
         """Train de controller via PPO.
@@ -141,10 +142,10 @@ class NNControllerPretrain(BaseNNController):
         self.logger.init_logger()
         if archive is not None:
             self.pretrain_bc_from_archive(configuration, archive)
+            self.pretrain_value_warmup(configuration)
             self.save_controller(self.logger, "pretrained_controller")
 
         self.pretrained_params = self.params
-        params = self.params
 
         # Leave rest of training to superclass
         super().train_controller(configuration, num_steps)
@@ -201,10 +202,11 @@ class NNControllerPretrain(BaseNNController):
 
         return jax.jit(expert_rollout)
 
-    def pretrain_bc_from_archive(self, configuration: Configuration, archive_path: str,
-                                  bc_iterations: int = 1000, warmup_iterations: int = 20,
-                                  num_rollout_steps:int = 500, noise_std: float = 0.02,
-                                  bc_lr: float = 1e-3, min_displacement: float = 0.2, top_k:int = 15):
+    def pretrain_bc_from_archive(
+            self, configuration: Configuration, archive_path: str,
+            bc_iterations: int = 1000, num_rollout_steps:int = 500, noise_std: float = 0.02,
+            bc_lr: float = 1e-3, min_displacement: float = 0.2, top_k:int = 15
+        ):
         """BC-pretraining met meerdere expert-gaits uit een map-elites archief.
 
         Vergelijkbaar met pretrain_bc, maar gebruikt top_k gaits uit het
@@ -215,7 +217,6 @@ class NNControllerPretrain(BaseNNController):
             configuration: trainings-configuratie.
             archive_path: pad naar map met selections.npy en x_positions.npy.
             bc_iterations: aantal BC-updateslagen.
-            warmup_iterations: aantal value warm-up iteraties.
             num_rollout_steps: stappen per rollout per richting.
             noise_std: ruis op expert-acties voor generalisatie.
             bc_lr: learning rate voor BC.
@@ -285,7 +286,6 @@ class NNControllerPretrain(BaseNNController):
         rng, *keys = jax.random.split(rng, k + 1)
         all_obs = []
         all_actions = []
-        target_angles = []
         n_sim_steps = 800
 
         for gait_idx, (gait_params, x_pos) in enumerate(zip(top_selections, top_x)):
@@ -294,7 +294,7 @@ class NNControllerPretrain(BaseNNController):
             self.speeds.append(abs(x_pos)/n_sim_steps)
 
             target_angle = 0.0 if x_pos > 0 else jnp.pi/5
-            target_angles.append(target_angle)
+            self.target_angles.append(target_angle)
 
             expert_cpg_state = cpg_generator.modulate_body(cpg.reset(), jnp.array(gait_params))
             
@@ -348,7 +348,15 @@ class NNControllerPretrain(BaseNNController):
                     "pretrain/bc_iteration": iteration,
                 })
 
-        # --- Fase 2: Value warm-up ---
+    def pretrain_value_warmup(
+        self,
+        configuration: Configuration,
+        num_rollout_steps: int = 500,
+        warmup_iterations: int = 20,
+    ):
+        rng = configuration.random.rng
+        env = Environment(configuration)
+        
         print("=== Fase 2: Value warm-up ===")
         rollout_fn = self._make_rollout_fn(env, self.model, configuration, num_rollout_steps)
         warmup_optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
@@ -365,7 +373,7 @@ class NNControllerPretrain(BaseNNController):
             )(
                 keys,
                 self.params,
-                jnp.array(target_angles),
+                jnp.array(self.target_angles),
                 jnp.array(self.speeds),
                 jnp.array(self.norm_speeds)
             )
