@@ -1,17 +1,10 @@
-from abc import ABC, abstractmethod
-import pickle
 from pathlib import Path
 
-import distrax
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
-from src.controller.control_input import ControlInput
-from src.controller.controller import Controller
-from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
 from src.cpg.cpg_generators.fully_connected_symmetric_cpg_generator import FullyConnectedSymmetricCPGGenerator
 from src.environment.environment import Environment
 from src.controller.BaseNNController import BaseNNController
@@ -91,7 +84,7 @@ class NNControllerPretrain(BaseNNController):
         self.kl_coef_init = jnp.array(0.1)
         self.kl_decay = jnp.array(50.0)
 
-    def train_controller(self, configuration, num_steps=1000, pretrained_body_cpg=None):
+    def train_controller(self, configuration, num_steps=1000, archive=None):
         """Train de controller via PPO.
 
         Args:
@@ -103,9 +96,10 @@ class NNControllerPretrain(BaseNNController):
                 uitgevoerd, gevolgd door PPO met KL-regularisatie.
         """
         # === Pretraining via Behavioral Cloning ===
-        if pretrained_body_cpg is not None:
-            self.logger = configuration.logger
-            self.pretrain_bc_from_archive(configuration, pretrained_body_cpg)
+        self.logger = configuration.logger
+        self.logger.init_logger()
+        if archive is not None:
+            self.pretrain_bc_from_archive(configuration, archive)
             self.save_controller(self.logger, "pretrained_controller")
 
         self.pretrained_params = self.params
@@ -124,7 +118,6 @@ class NNControllerPretrain(BaseNNController):
         log_data["loss"] = loss
         log_data["kl_coef"] = kl_coef
         self.logger.log(log_data)
-        print(f"Iter {iteration}, loss {loss}")
         return params, opt_state
 
     def _make_expert_rollout_fn(self, env, cpg_generator, cpg, configuration, num_steps):
@@ -175,12 +168,10 @@ class NNControllerPretrain(BaseNNController):
             min_displacement: minimale |x|-verplaatsing om gait te gebruiken.
             top_k: aantal gaits (met grootste |x|) om te gebruiken.
         """
-        import numpy as np
-        from pathlib import Path
 
         rng = configuration.random.rng
         env = Environment(configuration)
-        # Het archief is aangemaakt met de FullyConnectedCPGGenerator (30 oscillatoren,
+        # Het archief is aangemaakt met de FullyConnectedSymmetricCPGGenerator (30 oscillatoren,
         # genome_size = 1 + 30 + 30 + 30×30 = 961).  We gebruiken die generator hier
         # expliciet, ongeacht de CPG-configuratie in `configuration`.
         cpg_generator = FullyConnectedSymmetricCPGGenerator()
@@ -241,16 +232,15 @@ class NNControllerPretrain(BaseNNController):
         all_obs = []
         all_actions = []
         target_angles = []
+        n_sim_steps = 800
 
         for gait_idx, (gait_params, x_pos) in enumerate(zip(top_selections, top_x)):
             norm_speed = float(abs(x_pos) / max_speed)
             self.norm_speeds.append(norm_speed)
-            self.speeds.append(abs(x_pos)/800)
+            self.speeds.append(abs(x_pos)/n_sim_steps)
 
             target_angle = 0.0 if x_pos > 0 else jnp.pi/5
             target_angles.append(target_angle)
-
-            print(abs(x_pos)/800)
 
             expert_cpg_state = cpg_generator.modulate_body(cpg.reset(), jnp.array(gait_params))
             
@@ -303,8 +293,6 @@ class NNControllerPretrain(BaseNNController):
                     "pretrain/bc_loss": avg_loss,
                     "pretrain/bc_iteration": iteration,
                 })
-            if iteration % 10 == 0:
-                print(f"  BC epoch {iteration:3d}, loss: {avg_loss:.6f}")
 
         # --- Fase 2: Value warm-up ---
         print("=== Fase 2: Value warm-up ===")
@@ -355,9 +343,6 @@ class NNControllerPretrain(BaseNNController):
                     "pretrain/warmup_loss": float(loss),
                     "pretrain/warmup_iteration": iteration,
                 })
-
-            if iteration % 5 == 0:
-                print(f"  Value warm-up iter {iteration:2d}, loss: {loss:.6f}")
 
         print("=== Pretraining vanuit archief klaar ===")
         return self.params

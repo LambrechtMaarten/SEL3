@@ -5,7 +5,9 @@
 #PBS -o main.out 
 #PBS -e main.err
 
-# Assumes program is queued like this: "qsub srcipts/run_main.pbs"
+# Basic script to run training on HPC, change the PYTHONPATH command for different training
+
+# Assumes program is queued like this: "qsub srcipts/run.pbs"
 cd $PBS_O_WORKDIR
 
 
@@ -24,4 +26,4 @@ echo "Starting main.py"
 
 export HEADLESS=True
 
-PYTHONPATH=. python -u src/main.py train_network_pretrain scripts/controller
+PYTHONPATH=. python -u src/main.py train_network_pretrain scripts/archive

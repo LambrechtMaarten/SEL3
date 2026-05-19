@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Slightly changed venv script from the tutorial
+
 # Should be ran from root folder of project 
 
 # We create virtual environments on the $VSC_DATA storage, as JAX takes quite some space.

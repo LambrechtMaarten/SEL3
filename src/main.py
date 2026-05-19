@@ -60,43 +60,15 @@ if __name__ == "__main__":
         configuration = Configuration(
             SubConfigurationMap.get_configuration(Logger, "wandb"),
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
+            SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
             SubConfigurationMap.get_configuration(GeneticConfiguration, "map elites"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
+            SubConfigurationMap.get_configuration(ControllerConfiguration, "network"),
         )
 
-        # Laad de getrainde CPG-parameters voor RIGHT
-        # controller_path = sys.argv[2]
         controller = configuration.controller.controller
         controller.train_controller(configuration)
-
     elif sys.argv[1] == "train_network_pretrain":
-        # Gebruik: python -m src.main train_network_pretrain <pad/naar/expert_gait>
-        # De expert-gait is een tekstbestand opgeslagen door OneDirectionController.
-        if len(sys.argv) < 3:
-            print("Geef het pad naar de expert-gait mee als tweede argument.")
-            sys.exit(1)
-
-        with open(sys.argv[2], "r") as f:
-            raw = f.read()
-        body_cpg = jnp.array(
-            [float(x) for x in raw.replace("[", " ").replace("]", " ").split()]
-        )
-
-        configuration = Configuration(
-            SubConfigurationMap.get_configuration(Logger, "wandb"),
-            SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
-        )
-
-        controller = configuration.controller.controller
-        controller.train_controller(configuration, pretrained_body_cpg=body_cpg)
-
-    elif sys.argv[1] == "train_network_archive":
         # Gebruik: python -m src.main train_network_archive <pad/naar/archive/>
         # Het archief bevat selections.npy en x_positions.npy van map-elites.
         # Na pretraining wordt de controller opgeslagen voor evaluatie/render.
@@ -109,10 +81,9 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
+            SubConfigurationMap.get_configuration(GeneticConfiguration, "map elites"),
             SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
         )
-        configuration.logger.init_logger()
 
         controller = configuration.controller.controller
         controller.train_controller(configuration, pretrained_body_cpg=sys.argv[2])

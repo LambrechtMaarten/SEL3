@@ -8,9 +8,7 @@ import jax.numpy as jnp
 import optax
 import numpy as np
 
-from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
-from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
 from src.environment.environment import Environment
 
 def update_step(params, opt_state, model, batch, optimizer):
@@ -47,6 +45,7 @@ class ActorCritic(nn.Module):
 
 class BaseNNController(Controller):
     def __init__(self, action_dim):
+        self.stop_threshold = 0.05
         self.action_dim = action_dim
         self.params = None
         self.model = ActorCritic(action_dim=self.action_dim)
@@ -86,7 +85,7 @@ class BaseNNController(Controller):
                 jnp.atleast_1d(jnp.asarray(speed, dtype=jnp.float32)),  # doelsnelheid (1D)
                 jnp.roll(obs["joint_position"], 6 * sector),  # huidige gewrichtshoeken (30D)
                 jnp.roll(obs["joint_velocity"], 6 * sector), # gewrichtssnelheden voor fase-informatie (30D)
-                jnp.roll(obs["segment_contact"], 6 * sector)
+                jnp.roll(obs["segment_contact"], 6 * sector) # contact van segmenten (30D)
             ]
         )
     
@@ -136,7 +135,6 @@ class BaseNNController(Controller):
             if iteration % 100 == 0 and iteration != 0:
                 self.params = params
                 self.save_controller(self.logger, f"controller_{iteration}")
-            print(f"Starting iteration {iteration}")
             rng, subkey, speed_key = jax.random.split(rng, 3)
 
             # Wereldframe doelhoek: volledig random over 360°
@@ -181,16 +179,6 @@ class BaseNNController(Controller):
             ])
             returns = jnp.concatenate(returns_list)
 
-            print(f"Total reward: {jnp.sum(rew_buf)}")
-            print(f"Avg_reward: {jnp.sum(rew_buf) / len(arm_angles)}")
-            print(f"Max reward: {jnp.max(jnp.sum(all_rew, axis=1)):.4f}")
-            print(f"Min reward: {jnp.min(jnp.sum(all_rew, axis=1)):.4f}")
-            print("Average reward per step:", jnp.sum(rew_buf) / len(rew_buf))
-            print("Average advantage:", jnp.mean(advantages))
-            print("Average return:", jnp.mean(returns))
-
-            
-
             batch = (
                 jnp.array(obs_buf),
                 jnp.array(act_buf),
@@ -225,7 +213,6 @@ class BaseNNController(Controller):
             ) 
         log_data["loss"] = loss
         self.logger.log(log_data)
-        print(f"Iter {iteration}, loss {loss}")
         return params, opt_state
     
     def _make_rollout_fn(self, env, model, configuration, num_steps):
@@ -301,15 +288,13 @@ class BaseNNController(Controller):
         return flat_params.shape[0]
     
     def act(self, cpg_state, control_input, configuration, env_state):
-        STOP_THRESHOLD = 0.05
-
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
         deltas = jnp.array(control_input) - robot_pos
         distance = jnp.linalg.norm(deltas)
 
         # Doel bereikt: geen beweging
-        if distance < STOP_THRESHOLD:
+        if distance < self.STOP_THRESHOLD:
             return jnp.zeros(30)
 
         angle = jnp.arctan2(deltas[1], deltas[0])
@@ -321,13 +306,6 @@ class BaseNNController(Controller):
         # Snelheid: proportioneel aan afstand tot doel, verzadigt op 1.0
         # (robot vertraagt automatisch als het doel nadert)
         speed = np.clip(distance, 0.001, 1.0)
-
-        
-        print("SPEED: ", speed)
-        print("SECTOR: ", sector)
-        print("ANGLE: ", (local_angle / jnp.pi)*180)
-        robot_pos = obs["disk_position"][0:2]
-        print("POS: ", robot_pos)
 
         x = self.build_obs_angle(env_state, local_angle, sector, speed)
 
