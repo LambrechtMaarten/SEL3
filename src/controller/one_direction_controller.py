@@ -92,7 +92,7 @@ class OneDirectionController(Controller):
         cpg = cpg_generator.generate(configuration)
         return cpg_generator.body_to_jarr(cpg.reset()).size
 
-    def save_controller(self, logger: Logger):
+    def save_controller(self, logger: Logger, name:str ="controller"):
         # Standard logger needs string, but wandb does not :(
         # noinspection PyTypeChecker
         logger.log_controller(jnp.array_str(self.body_cpg))

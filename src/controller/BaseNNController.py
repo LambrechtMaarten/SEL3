@@ -1,17 +1,33 @@
 import pickle
 from pathlib import Path
 
+from typing import Any, Callable, Tuple
+from src.jax_extra.jax_extra import jarr
+
 import distrax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import optax
 import numpy as np
+from moojoco.environment.base import BaseEnvState
+
 
 from src.controller.controller import Controller
 from src.environment.environment import Environment
+from configs.config import Configuration
+from configs.subconfigurations.logger.logger import Logger
+from src.controller.control_input import ControlInput
+from src.cpg.cpg_state import CPGState
+from src.jax_extra.jax_extra import jarr
 
-def update_step(params, opt_state, model, batch, optimizer):
+def update_step(
+    params: Any,
+    opt_state: optax.OptState,
+    model: nn.Module,
+    batch: tuple[jarr, jarr, jarr, jarr, jarr],
+    optimizer: optax.GradientTransformation,
+) -> tuple[Any, optax.OptState, jarr]:
     loss, grads = jax.value_and_grad(ppo_loss)(params, model, batch)
     updates, opt_state = optimizer.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
@@ -44,9 +60,9 @@ class ActorCritic(nn.Module):
         return dist, jnp.squeeze(value, axis=-1)
 
 class BaseNNController(Controller):
-    def __init__(self, action_dim):
+    def __init__(self):
         self.stop_threshold = 0.05
-        self.action_dim = action_dim
+        self.action_dim = 5 * 3 * 2 # 5 arms, 3 segments, 2 joints
         self.params = None
         self.model = ActorCritic(action_dim=self.action_dim)
         self.optimizer = optax.chain(
@@ -59,10 +75,16 @@ class BaseNNController(Controller):
         self.norm_speeds = []
 
     @staticmethod
-    def evaluator(configuration, rng):
+    def evaluator(configuration: Configuration, rng):
         raise Exception("Not implemented")
 
-    def angle_reward(self, prev_pos, curr_pos, angle, speed_target):
+    def angle_reward(
+        self,
+        prev_pos: jarr,
+        curr_pos: jarr,
+        angle: float,
+        speed_target: float,
+    ) -> tuple[jarr, jarr, jarr]:
         delta = curr_pos[:2] - prev_pos[:2]
         direction = jnp.array([jnp.cos(angle), jnp.sin(angle)])
 
@@ -74,7 +96,13 @@ class BaseNNController(Controller):
 
         return (forward_velocity * 0.3) + speed_reward, forward_velocity*0.3, speed_reward
 
-    def build_obs_angle(self, obs, angle, sector=0, speed=1.0):
+    def build_obs_angle(
+        self,
+        obs: dict[str, jarr],
+        angle: float,
+        sector: int = 0,
+        speed: float = 1.0,
+    ) -> jarr:
         # Encodeer hoek als sin/cos zodat 0° en 360° hetzelfde zijn
         angle_enc = jnp.array([jnp.sin(angle), jnp.cos(angle)])
 
@@ -88,7 +116,7 @@ class BaseNNController(Controller):
             ]
         )
     
-    def to_local_angle_and_sector(self, relative_angle):
+    def to_local_angle_and_sector(self, relative_angle: float) -> Tuple[float, int]:
         angle = jnp.mod(relative_angle + jnp.pi, 2 * jnp.pi) - jnp.pi
         sector_size = 2 * jnp.pi / 5
         k_raw = jnp.round(angle / sector_size).astype(int)
@@ -96,6 +124,14 @@ class BaseNNController(Controller):
         local_angle = angle - k_raw * sector_size 
         
         return (local_angle, k_idx)
+    
+    def get_speeds(self, rng):
+        n = 15
+        max_speed = 0.0036
+        if len(self.speeds) > 0:
+            n = len(self.speeds)      
+            max_speed = self.speeds[-1]
+        return n, max_speed
     
     def train_controller(self, configuration, num_steps=500):
         """Train de controller via PPO.
@@ -131,19 +167,22 @@ class BaseNNController(Controller):
             return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0, 0))(keys, params, angles, speeds, norm_speeds)
 
         for iteration in range(1000):
+            # Checkpoint
             if iteration % 100 == 0 and iteration != 0:
                 self.params = params
                 self.save_controller(self.logger, f"controller_{iteration}")
-            rng, subkey, speed_key = jax.random.split(rng, 3)
+
+            rng, subkey, angle_key, speed_key, speed_key2 = jax.random.split(rng, 5)
+
+            n, max_speed = self.get_speeds(speed_key)
 
             # Wereldframe doelhoek: volledig random over 360°
-            arm_angles = jax.random.uniform(subkey, shape=(len(self.speeds),), minval=0.0, maxval=2*jnp.pi)
+            arm_angles = jax.random.uniform(angle_key, shape=(n,), minval=0.0, maxval=2*jnp.pi)
             
             # Interpoleer tussen bekende speeds voor betere generalisatie
-            max_speed = self.speeds[-1]
-            norm_speeds_random = jax.random.uniform(speed_key, shape=(len(self.speeds),), minval=0.01, maxval=1.0)
+            norm_speeds_random = jax.random.uniform(speed_key2, shape=(n,), minval=0.01, maxval=1.0)
             speeds_random = norm_speeds_random * max_speed  # echte m/s in simulator voor reward
-            traj = rollout_many(subkey, params, arm_angles, speeds_random, norm_speeds_random)  # consistent!
+            traj = rollout_many(subkey, params, arm_angles, speeds_random, norm_speeds_random)
 
             (
                 all_obs,
@@ -205,7 +244,14 @@ class BaseNNController(Controller):
         self.params = params
         self.save_controller(configuration.logger)
 
-    def update_and_log(self, params, opt_state, batch, iteration, log_data):
+    def update_and_log(
+        self,
+        params: Any,
+        opt_state: optax.OptState,
+        batch: tuple[jarr, jarr, jarr, jarr, jarr],
+        iteration: int,
+        log_data: dict[str, Any],
+    ) -> tuple[Any, optax.OptState]:
         for _ in range(self.epochs):
             params, opt_state, loss = update_step_jit(
                 params, opt_state, self.model, batch, self.optimizer
@@ -214,7 +260,13 @@ class BaseNNController(Controller):
         self.logger.log(log_data)
         return params, opt_state
     
-    def _make_rollout_fn(self, env, model, configuration, num_steps):
+    def _make_rollout_fn(
+        self,
+        env: Environment,
+        model: nn.Module,
+        configuration: Configuration,
+        num_steps: int,
+    ) -> Callable:
         def rollout_fn(rng, params, angle, speed, norm_speed):
 
             def scan_step(carry, _):
@@ -257,7 +309,14 @@ class BaseNNController(Controller):
 
         return jax.jit(rollout_fn)
 
-    def compute_gae(self, rewards, values, dones, gamma=0.99, lam=0.95):
+    def compute_gae(
+        self,
+        rewards: jarr,
+        values: jarr,
+        dones: jarr,
+        gamma: float = 0.99,
+        lam: float = 0.95,
+    ) -> jarr:
         advantages = []
         gae = 0.0
 
@@ -268,7 +327,7 @@ class BaseNNController(Controller):
 
         return jnp.array(advantages)
 
-    def save_controller(self, logger, name="controller"):
+    def save_controller(self, logger: Logger, name:str ="controller"):
         path = Path(logger.base_folder) / name
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -282,11 +341,11 @@ class BaseNNController(Controller):
                 action_dim=self.params["params"]["Dense_2"]["kernel"].shape[1]
             )
 
-    def genome_size(self, configuration):
+    def genome_size(self, configuration: Configuration):
         flat_params, _ = jax.flatten_util.ravel_pytree(self.params)
         return flat_params.shape[0]
     
-    def act(self, cpg_state, control_input, configuration, env_state):
+    def act(self, cpg_state: CPGState, control_input: ControlInput, configuration: Configuration, env_state: BaseEnvState):
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
         deltas = jnp.array(control_input) - robot_pos
@@ -319,7 +378,14 @@ class BaseNNController(Controller):
     
 
 
-def ppo_loss(params, model, batch, clip_eps=0.2, vf_coef=0.5, ent_coef=0.01):
+def ppo_loss(
+    params: Any,
+    model: nn.Module,
+    batch: tuple[jarr, jarr, jarr, jarr, jarr],
+    clip_eps: float = 0.2,
+    vf_coef: float = 0.5,
+    ent_coef: float = 0.01,
+) -> jarr:    
     obs, actions, old_log_probs, returns, advantages = batch
 
     dist, values = model.apply(params, obs)

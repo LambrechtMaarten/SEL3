@@ -66,8 +66,8 @@ class WandbLogger(Logger):
         if hasattr(self, "configuration"):
             wandb.config.update(serialize(self.configuration))
 
-    def log(self, name: str, logging: str):
-        wandb.log({name: logging})
+    def log(self, logging: dict):
+        wandb.log(logging)
 
     def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int):
         scores = evaluations[1] if isinstance(evaluations, tuple) else evaluations

@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from typing import Any, Callable, Tuple
+from src.jax_extra.jax_extra import jarr
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -78,7 +81,7 @@ value_warmup_jit = jax.jit(value_warmup_step, static_argnames=["model", "optimiz
 
 class NNControllerPretrain(BaseNNController):
     def __init__(self):
-        super().__init__(30)  # 5 armen × 3 segmenten × 2 assen
+        super().__init__()  # 5 armen × 3 segmenten × 2 assen
         self.pretrained_params = None
         # KL-annealing: start bij 0.1, halveert elke ~35 iteraties
         self.kl_coef_init = jnp.array(0.1)
@@ -108,7 +111,14 @@ class NNControllerPretrain(BaseNNController):
         # Leave rest of training to superclass
         super().train_controller(configuration, num_steps)
     
-    def update_and_log(self, params, opt_state, batch, iteration, log_data):
+    def update_and_log(
+        self,
+        params: Any,
+        opt_state: optax.OptState,
+        batch: tuple[jarr, jarr, jarr, jarr, jarr],
+        iteration: int,
+        log_data: dict[str, Any],
+    ) -> tuple[Any, optax.OptState]:
         kl_coef = self.kl_coef_init * jnp.exp(-jnp.array(iteration, dtype=jnp.float32) / self.kl_decay)
         for _ in range(self.epochs):
             params, opt_state, loss = update_step_kl_jit(
