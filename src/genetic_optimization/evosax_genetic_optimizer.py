@@ -1,3 +1,5 @@
+"""Genetic optimizer wrapping the EvoSax SNES evolutionary strategy."""
+
 from typing import Any, Tuple
 
 import jax
@@ -61,10 +63,10 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
         if self.es is None:
             population_size = population.shape[0]
 
-            # Gebruik het gemiddelde van de populatie als startpunt
-            # zodat pre-getrainde gewichten effectief worden gebruikt
-            # als warm start. Bij random initialisatie is dit gewoon
-            # het gemiddelde van een normale verdeling ≈ 0.
+            # Use the mean of the population as the starting point so that
+            # pre-trained weights are effectively used as a warm start.
+            # For random initialisation this is simply the mean of a normal
+            # distribution ≈ 0.
             solution = jnp.mean(population, axis=0)
 
             self.es = ES(

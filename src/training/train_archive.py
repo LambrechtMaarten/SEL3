@@ -1,3 +1,5 @@
+"""Training script that builds a map-elites CPG gait archive."""
+
 from pathlib import Path
 
 import jax
@@ -9,6 +11,23 @@ from src.controller.one_direction_map_elites_controller import OneDirectionMapEl
 
 
 def train_archive(configuration: Configuration):
+    """Run the map-elites genetic optimisation and save the resulting gait archive.
+
+    Overrides the controller in the provided configuration with a
+    :class:`OneDirectionMapElitesController`, runs the genetic optimizer for
+    the configured number of generations, and saves the archive artefacts
+    (groups, joint-position edges, genome selections, and fitness evaluations)
+    to ``<logger.base_folder>/archive/``.
+
+    Args:
+        configuration: Global simulation and training configuration.  The
+            controller sub-configuration is overwritten internally.
+
+    Returns:
+        Tuple of (groups, edges) where ``groups`` is an integer array of
+        behavioural bin indices and ``edges`` is a joint-position trajectory
+        array of shape ``(N, 800, 30)``.
+    """
     configuration.controller = ControllerConfiguration(
         "map elites", OneDirectionMapElitesController()
     )
@@ -39,7 +58,7 @@ def train_archive(configuration: Configuration):
     get_edges = jax.jit(controller.get_edges(configuration, configuration.random.split()))
     groups, edges = get_edges(selections)
 
-    # Sla het archief op zodat het gebruikt kan worden voor pretraining
+    # Save the archive so it can be used for pre-training
     archive_dir = Path(configuration.logger.base_folder) / "archive"
     archive_dir.mkdir(parents=True, exist_ok=True)
 
@@ -51,7 +70,7 @@ def train_archive(configuration: Configuration):
         np.array(evaluations[1] if isinstance(evaluations, tuple) else evaluations),
     )
 
-    print(f"Archief opgeslagen in: {archive_dir}")
+    print(f"Archive saved to: {archive_dir}")
     print(f"  groups.npy     — shape {np.array(groups).shape}")
     print(f"  edges.npy      — shape {np.array(edges).shape}")
     print(f"  selections.npy — shape {np.array(selections).shape}")

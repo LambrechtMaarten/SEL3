@@ -1,3 +1,5 @@
+"""Interactive keyboard-driven controller simulation using OpenCV for display."""
+
 import os.path
 
 import cv2
@@ -27,6 +29,15 @@ key_to_angle = {
 
 
 def simulate_controller(output_path: str):
+    """Run an interactive keyboard-controlled simulation of a saved controller.
+
+    Loads a saved controller and opens an OpenCV window.  The user can steer
+    the robot using the keys ``z`` (up), ``s`` (down), ``q`` (left),
+    ``d`` (right).  Press ESC to quit.
+
+    Args:
+        output_path: Directory containing the saved ``controller`` file.
+    """
     configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "silent_logger"),
         SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
@@ -53,7 +64,7 @@ def simulate_controller(output_path: str):
         angle = key_to_angle.get(key, None)
         control_input = ControlInput(0.0 if angle is None else 1.0, angle)
 
-        # act geeft directe joint actions terug — geen CPG tussenstap
+        # act returns direct joint actions — no CPG intermediate step
         actions = configuration.controller.controller.act(
             None, control_input, configuration, env_state
         )

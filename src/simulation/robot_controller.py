@@ -1,3 +1,5 @@
+"""Joystick-style interactive controller simulation with a threaded simulation loop."""
+
 import os.path
 import threading
 import time
@@ -42,6 +44,20 @@ _running = True
 
 
 def mouse_callback(event, x, y, flags, param):
+    """OpenCV mouse callback that translates joystick panel mouse events to control inputs.
+
+    Updates the global ``_dot_x``, ``_dot_y``, and ``_control_input`` based
+    on left-button drag events.  The dot position is clamped to the joystick
+    circle radius.  On button release the dot snaps back to centre and speed
+    is set to zero.
+
+    Args:
+        event: OpenCV mouse event type.
+        x: Mouse x-coordinate in panel pixels.
+        y: Mouse y-coordinate in panel pixels.
+        flags: OpenCV event flags (e.g. button state).
+        param: Unused.
+    """
     global _dot_x, _dot_y, _control_input
 
     if event in (cv2.EVENT_LBUTTONDOWN, cv2.EVENT_MOUSEMOVE) and (flags & cv2.EVENT_FLAG_LBUTTON):
@@ -72,6 +88,21 @@ def mouse_callback(event, x, y, flags, param):
 
 
 def draw_joystick_panel(dot_x, dot_y, speed, angle_deg):
+    """Render the joystick UI panel as an image array.
+
+    Draws concentric circles, guide lines, the joystick dot at its current
+    position, and text labels showing the current speed and angle.
+
+    Args:
+        dot_x: Current x-coordinate of the joystick dot in panel pixels.
+        dot_y: Current y-coordinate of the joystick dot in panel pixels.
+        speed: Current normalised speed [0, 1] shown as a text label.
+        angle_deg: Current heading angle in degrees shown as a text label.
+
+    Returns:
+        JAX uint8 image array of shape ``(PANEL_SIZE, PANEL_SIZE, 3)``
+        suitable for display with ``cv2.imshow``.
+    """
     panel = jnp.full((PANEL_SIZE, PANEL_SIZE, 3), BG_COLOR, dtype=jnp.uint8)
 
     cv2.circle(panel, (CENTER, CENTER), RADIUS, RING_COLOR, 2)
@@ -110,7 +141,7 @@ def draw_joystick_panel(dot_x, dot_y, speed, angle_deg):
 
     cv2.putText(
         panel,
-        "Klik in cirkel | ESC = stop",
+        "Click in circle | ESC = stop",
         (10, 14),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.38,
@@ -123,6 +154,18 @@ def draw_joystick_panel(dot_x, dot_y, speed, angle_deg):
 
 
 def simulation_loop(env, configuration, env_state):
+    """Background thread that steps the simulation at a fixed 60 Hz rate.
+
+    Reads the current control input from the shared ``_control_input`` global,
+    calls the controller, steps the environment, and writes the rendered frame
+    to ``_latest_frame``.  Stops when ``_running`` is set to False.
+
+    Args:
+        env: Wrapped MuJoCo environment.
+        configuration: Global simulation and training configuration.
+        env_state: Initial environment state (updated in-place within the
+            loop scope via local rebinding).
+    """
     global _latest_frame, _running
 
     DT = 1.0 / 60.0
@@ -150,6 +193,15 @@ def simulation_loop(env, configuration, env_state):
 
 
 def simulate_controller_joystick(output_path: str):
+    """Launch the joystick-controlled simulation with a live OpenCV display.
+
+    Loads the saved controller, starts the simulation in a background thread,
+    and runs a 60 Hz display loop that shows the joystick panel and simulation
+    render side by side.  Press ESC to quit.
+
+    Args:
+        output_path: Directory containing the saved ``controller`` file.
+    """
     global _running
 
     configuration = Configuration(

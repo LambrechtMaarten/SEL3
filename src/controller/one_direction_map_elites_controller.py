@@ -1,3 +1,5 @@
+"""CPG-based map-elites controller that builds a diverse archive of locomotion gaits."""
+
 from typing import Any, Callable, Tuple
 
 import jax
@@ -14,11 +16,20 @@ from src.jax_extra.jax_extra import jarr
 
 
 class OneDirectionMapElitesController(Controller):
-    """
-    This controller sets a cpg for the entire body when it gets input, trying to get as far away from (0,0) as possible.
+    """CPG-based controller designed for map-elites quality-diversity optimisation.
+
+    The evaluator scores genomes by their energy efficiency and assigns each
+    genome to a behavioural bin based on its x-displacement.  Genomes in the
+    same bin compete so that the archive retains a diverse set of gaits across
+    different displacement magnitudes.
+
+    Attributes:
+        body_cpg: Flat JAX array encoding the CPG body parameters, or None
+            before a genome has been loaded.
     """
 
     def __init__(self):
+        """Initialise with no CPG genome loaded."""
         self.body_cpg: jarr | None = None
 
     def act(
@@ -28,11 +39,39 @@ class OneDirectionMapElitesController(Controller):
         configuration: Configuration,
         env_state: BaseEnvState,
     ):
+        """Modulate the CPG state using the stored genome and return the updated state.
+
+        Args:
+            cpg_state: Current CPG state to be modulated.
+            control_input: Unused; present for interface compatibility.
+            configuration: Global simulation and training configuration.
+            env_state: Unused; present for interface compatibility.
+
+        Returns:
+            CPG state modulated with the stored body genome.
+        """
         cpg_generator = configuration.cpg.cpg_generator
         return cpg_generator.modulate_body(cpg_state, self.body_cpg)
 
     @staticmethod
     def evaluator(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr, jarr]]:
+        """Return a map-elites fitness evaluator.
+
+        The evaluator returns both rescaled fitness scores (for map-elites
+        selection) and raw energy scores (for logging and archive saving).
+        Genomes are grouped into behavioural bins by their x-displacement and
+        intra-bin competition is applied so that each bin retains only the
+        most energy-efficient gait.
+
+        Args:
+            configuration: Global simulation and training configuration.
+            rng: JAX random key used to seed environment resets.
+
+        Returns:
+            A callable that maps a batch of genome arrays to a tuple of
+            (rescaled_scores, raw_energy_scores).
+        """
+
         def evaluator(arr: jarr) -> Tuple[jarr, jarr]:
             env = Environment(configuration)
 
@@ -93,6 +132,23 @@ class OneDirectionMapElitesController(Controller):
 
     @staticmethod
     def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr, jarr]]:
+        """Return a function that evaluates genomes and collects per-step joint positions.
+
+        Used after optimisation to record the joint-position trajectories
+        (``edges``) for each genome in the archive, together with its
+        behavioural bin index.
+
+        Args:
+            configuration: Global simulation and training configuration.
+            rng: JAX random key used to seed environment resets.
+
+        Returns:
+            A callable that maps a batch of genome arrays to a tuple of
+            (group_indices, edge_trajectories) where group_indices are integer
+            behavioural bin IDs and edge_trajectories has shape
+            ``(N, 800, 30)``.
+        """
+
         def evaluator(arr: jarr) -> Tuple[jarr, jarr]:
             env = Environment(configuration)
 
@@ -159,16 +215,37 @@ class OneDirectionMapElitesController(Controller):
         return evaluator
 
     def genome_size(self, configuration: Configuration) -> int:
+        """Return the number of genes in a single CPG body genome.
+
+        Args:
+            configuration: Global simulation and training configuration.
+
+        Returns:
+            Integer length of the flat genome array.
+        """
         cpg_generator = configuration.cpg.cpg_generator
         cpg = cpg_generator.generate(configuration)
         return cpg_generator.body_to_jarr(cpg.reset()).size
 
     def save_controller(self, logger: Logger, name: str = "controller"):
+        """Log the CPG genome as a string via the provided logger.
+
+        Args:
+            logger: Logger instance (standard or wandb).
+            name: Unused; present for interface compatibility.
+        """
         # Standard logger needs string, but wandb does not :(
         # noinspection PyTypeChecker
         logger.log_controller(jnp.array_str(self.body_cpg))
 
     def read_controller(self, path: str):
+        """Load the CPG genome from a plain-text file.
+
+        Args:
+            path: Filesystem path to the text file containing the genome as
+                a space-separated list of floats (with optional square
+                brackets).
+        """
         with open(path, "r") as f:
             arrays = f.read()
             self.body_cpg = jnp.array(

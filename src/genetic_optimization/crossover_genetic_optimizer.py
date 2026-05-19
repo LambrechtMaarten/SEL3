@@ -1,3 +1,5 @@
+"""Genetic optimizer that uses arm-aware crossover and log-scale Gaussian mutation."""
+
 from typing import Any, Tuple
 
 import jax
@@ -8,12 +10,46 @@ from src.jax_extra.jax_extra import jarr
 
 
 class CrossoverGeneticOptimizer(GeneticOptimizer):
+    """Genetic optimizer with arm-structured crossover and adaptive mutation.
+
+    Selection keeps the top 50 % of individuals by fitness.  Reproduction
+    pairs survivors randomly and performs arm-level crossover: for each of
+    the 5 arms a Bernoulli mask selects whether the child inherits amplitude,
+    offset, and phase-bias parameters from parent 1 or parent 2.  Mutation
+    uses log-uniformly sampled step sizes (0.01 to ~2.5) so that both fine
+    and coarse perturbations are explored.
+    """
+
     def select(self, population: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
+        """Select the top 50 % of individuals by fitness score.
+
+        Args:
+            population: Genome array of shape ``(population_size, genome_size)``.
+            evaluations: Fitness scores of shape ``(population_size,)``.
+            rng: Unused.
+            state: Unused.
+
+        Returns:
+            Tuple of (top_half_genomes, None).
+        """
         n_select = jnp.size(population, 0) // 2
         selected_idx = jnp.argsort(evaluations)[-n_select:]
         return population[selected_idx], None
 
     def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
+        """Generate offspring via arm-level crossover followed by adaptive mutation.
+
+        Args:
+            genomes: Selected survivor genomes of shape
+                ``(n_survivors, genome_size)``.
+            evaluations: Unused.
+            rng: JAX random key.
+            state: Unused.
+
+        Returns:
+            Tuple of (new_population, None) where new_population concatenates
+            the original survivors with their crossed-over, mutated offspring.
+        """
         n_genomes = genomes.shape[0]
 
         rng, rng_perm, rng_armmask, rng_mutation = jax.random.split(rng, 4)
@@ -33,7 +69,7 @@ class CrossoverGeneticOptimizer(GeneticOptimizer):
         off_size = n_osc
         phase_size = n_osc * n_osc
 
-        # split genome
+        # split genome into its structural components
         def split_genome(g):
             freq = g[:, :freq_size]
             amp = g[:, freq_size : freq_size + amp_size]

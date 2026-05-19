@@ -1,3 +1,5 @@
+"""Script to render and save a video of a pre-trained controller navigating waypoints."""
+
 import os
 
 import jax.numpy as jnp
@@ -19,6 +21,16 @@ from src.environment.environment import Environment
 
 
 def render_saved_controller(controller_path: str):
+    """Load a saved controller and render a multi-waypoint navigation episode.
+
+    Constructs a standard configuration, loads the controller from disk, then
+    runs the simulation until the robot reaches each of three hardcoded
+    waypoints (or a maximum of 1000 steps per waypoint).  The rendered frames
+    are logged as a video.
+
+    Args:
+        controller_path: Directory containing the saved ``controller`` file.
+    """
     register()
     configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "standard"),
