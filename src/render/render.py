@@ -5,16 +5,12 @@ import numpy as np
 from moojoco.environment.base import MuJoCoEnvironmentConfiguration
 
 
-def save_video(
-        images: np.ndarray,
-        path: str | None = None
-) -> str | None:
+def save_video(images: np.ndarray, path: str | None = None) -> str | None:
     media.write_video(path=path, images=images)
 
 
 def post_render(
-        render_output: List[np.ndarray],
-        environment_configuration: MuJoCoEnvironmentConfiguration
+    render_output: List[np.ndarray], environment_configuration: MuJoCoEnvironmentConfiguration
 ) -> np.ndarray | None:
     if render_output is None:
         # Temporary workaround until https://github.com/google-deepmind/mujoco/issues/1379 is fixed

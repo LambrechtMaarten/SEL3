@@ -7,7 +7,9 @@ import jax.numpy as jnp
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subconfigurations.controller.controller_configurations import (ControllerConfiguration,)
+from configs.subconfigurations.controller.controller_configurations import (
+    ControllerConfiguration,
+)
 from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
 from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
 from configs.subconfigurations.logger.logger import Logger
@@ -18,16 +20,16 @@ from src.environment.environment import Environment
 # Generated using Claude https://claude.ai/share/02789b94-ab47-40c2-9985-9b4de5c19e3a
 
 PANEL_SIZE = 300
-CENTER     = PANEL_SIZE // 2
-RADIUS     = 120
+CENTER = PANEL_SIZE // 2
+RADIUS = 120
 DOT_RADIUS = 12
 
-BG_COLOR     = (30, 30, 30)
-RING_COLOR   = (70, 70, 70)
-RING_COLOR2  = (50, 50, 50)
-DOT_COLOR    = (0, 200, 255)
+BG_COLOR = (30, 30, 30)
+RING_COLOR = (70, 70, 70)
+RING_COLOR2 = (50, 50, 50)
+DOT_COLOR = (0, 200, 255)
 CENTER_COLOR = (100, 100, 100)
-TEXT_COLOR   = (200, 200, 200)
+TEXT_COLOR = (200, 200, 200)
 ACCENT_COLOR = (0, 200, 255)
 
 state_lock = threading.Lock()
@@ -84,14 +86,38 @@ def draw_joystick_panel(dot_x, dot_y, speed, angle_deg):
     cv2.circle(panel, (dot_x, dot_y), DOT_RADIUS, (255, 255, 255), 1)
     cv2.circle(panel, (CENTER, CENTER), 4, CENTER_COLOR, -1)
 
-    cv2.putText(panel, f"Speed: {speed:.2f}", (10, PANEL_SIZE - 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.45, TEXT_COLOR, 1, cv2.LINE_AA)
+    cv2.putText(
+        panel,
+        f"Speed: {speed:.2f}",
+        (10, PANEL_SIZE - 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.45,
+        TEXT_COLOR,
+        1,
+        cv2.LINE_AA,
+    )
 
-    cv2.putText(panel, f"Angle: {angle_deg:.1f} deg", (10, PANEL_SIZE - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.45, TEXT_COLOR, 1, cv2.LINE_AA)
+    cv2.putText(
+        panel,
+        f"Angle: {angle_deg:.1f} deg",
+        (10, PANEL_SIZE - 20),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.45,
+        TEXT_COLOR,
+        1,
+        cv2.LINE_AA,
+    )
 
-    cv2.putText(panel, "Klik in cirkel | ESC = stop", (10, 14),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.38, (120, 120, 120), 1, cv2.LINE_AA)
+    cv2.putText(
+        panel,
+        "Klik in cirkel | ESC = stop",
+        (10, 14),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.38,
+        (120, 120, 120),
+        1,
+        cv2.LINE_AA,
+    )
 
     return panel
 
@@ -113,9 +139,7 @@ def simulation_loop(env, configuration, env_state):
                 break
             control = _control_input
 
-        actions = configuration.controller.controller.act(
-            None, control, configuration, env_state
-        )
+        actions = configuration.controller.controller.act(None, control, configuration, env_state)
 
         env_state = env.step(actions, env_state)
         frame = env.render(env_state)
@@ -139,9 +163,7 @@ def simulate_controller_joystick(output_path: str):
 
     env = Environment(configuration)
 
-    configuration.controller.controller.read_controller(
-        os.path.join(output_path, "controller")
-    )
+    configuration.controller.controller.read_controller(os.path.join(output_path, "controller"))
 
     env_state = env.reset(configuration.random.split())
 
@@ -173,11 +195,7 @@ def simulate_controller_joystick(output_path: str):
         with frame_lock:
             frame = _latest_frame
 
-        panel = draw_joystick_panel(
-            dot_x, dot_y,
-            speed,
-            float(jnp.degrees(angle))
-        )
+        panel = draw_joystick_panel(dot_x, dot_y, speed, float(jnp.degrees(angle)))
 
         cv2.imshow("Joystick", panel)
 

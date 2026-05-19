@@ -32,7 +32,9 @@ class StandardLogger(Logger):
         with open(os.path.join(self.base_folder, "configuration.json"), "w") as f:
             f.write(json_str)
 
-    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int, **kwargs):
+    def log_genetic_generation(
+        self, population: jarr, selections: jarr, evaluations: jarr, generation: int, **kwargs
+    ):
         path = Path(os.path.join(self.base_folder, "genetic"))
         if not os.path.exists(path):
             path.touch()

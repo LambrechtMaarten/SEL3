@@ -1,24 +1,23 @@
 import pickle
 from pathlib import Path
-
 from typing import Any, Callable, Tuple
 
 import distrax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import optax
 import numpy as np
+import optax
 from moojoco.environment.base import BaseEnvState
 
-
-from src.controller.controller import Controller
-from src.environment.environment import Environment
 from configs.config import Configuration
 from configs.subconfigurations.logger.logger import Logger
 from src.controller.control_input import ControlInput
+from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState
+from src.environment.environment import Environment
 from src.jax_extra.jax_extra import jarr
+
 
 def ppo_loss(
     params: Any,
@@ -27,7 +26,7 @@ def ppo_loss(
     clip_eps: float = 0.2,
     vf_coef: float = 0.5,
     ent_coef: float = 0.01,
-) -> jarr:    
+) -> jarr:
     obs, actions, old_log_probs, returns, advantages = batch
 
     dist, values = model.apply(params, obs)
@@ -45,6 +44,7 @@ def ppo_loss(
 
     return policy_loss + vf_coef * value_loss - ent_coef * entropy
 
+
 def update_step(
     params: Any,
     opt_state: optax.OptState,
@@ -59,6 +59,7 @@ def update_step(
 
 
 update_step_jit = jax.jit(update_step, static_argnames=["model", "optimizer"])
+
 
 class ActorCritic(nn.Module):
     action_dim: int
@@ -83,16 +84,14 @@ class ActorCritic(nn.Module):
 
         return dist, jnp.squeeze(value, axis=-1)
 
+
 class BaseNNController(Controller):
     def __init__(self):
         self.stop_threshold = 0.05
-        self.action_dim = 5 * 3 * 2 # 5 arms, 3 segments, 2 joints
+        self.action_dim = 5 * 3 * 2  # 5 arms, 3 segments, 2 joints
         self.params = None
         self.model = ActorCritic(action_dim=self.action_dim)
-        self.optimizer = optax.chain(
-            optax.clip_by_global_norm(0.5),
-            optax.adam(3e-4)
-        )
+        self.optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
         self.logger = None
         self.epochs = 6
         self.speeds = []
@@ -118,7 +117,7 @@ class BaseNNController(Controller):
 
         speed_reward = -speed_error * 10
 
-        return (forward_velocity * 0.3) + speed_reward, forward_velocity*0.3, speed_reward
+        return (forward_velocity * 0.3) + speed_reward, forward_velocity * 0.3, speed_reward
 
     def build_obs_angle(
         self,
@@ -135,28 +134,30 @@ class BaseNNController(Controller):
                 angle_enc,
                 jnp.atleast_1d(jnp.asarray(speed, dtype=jnp.float32)),  # doelsnelheid (1D)
                 jnp.roll(obs["joint_position"], 6 * sector),  # huidige gewrichtshoeken (30D)
-                jnp.roll(obs["joint_velocity"], 6 * sector), # gewrichtssnelheden voor fase-informatie (30D)
-                jnp.roll(obs["segment_contact"], 6 * sector) # contact van segmenten (30D)
+                jnp.roll(
+                    obs["joint_velocity"], 6 * sector
+                ),  # gewrichtssnelheden voor fase-informatie (30D)
+                jnp.roll(obs["segment_contact"], 6 * sector),  # contact van segmenten (30D)
             ]
         )
-    
+
     def to_local_angle_and_sector(self, relative_angle: float) -> Tuple[float, int]:
         angle = jnp.mod(relative_angle + jnp.pi, 2 * jnp.pi) - jnp.pi
         sector_size = 2 * jnp.pi / 5
         k_raw = jnp.round(angle / sector_size).astype(int)
         k_idx = k_raw % 5
-        local_angle = angle - k_raw * sector_size 
-        
+        local_angle = angle - k_raw * sector_size
+
         return (local_angle, k_idx)
-    
+
     def get_speeds(self):
         n = 15
         max_speed = 0.0036
         if len(self.speeds) > 0:
-            n = len(self.speeds)      
+            n = len(self.speeds)
             max_speed = self.speeds[-1]
         return n, max_speed
-    
+
     def train_controller(self, configuration, num_steps=500):
         """Train de controller via PPO.
 
@@ -188,7 +189,9 @@ class BaseNNController(Controller):
 
         def rollout_many(rng, params, angles, speeds, norm_speeds):
             keys = jax.random.split(rng, len(angles))
-            return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0, 0))(keys, params, angles, speeds, norm_speeds)
+            return jax.vmap(rollout_fn, in_axes=(0, None, 0, 0, 0))(
+                keys, params, angles, speeds, norm_speeds
+            )
 
         for iteration in range(1000):
             # Checkpoint
@@ -201,8 +204,8 @@ class BaseNNController(Controller):
             n, max_speed = self.get_speeds()
 
             # Wereldframe doelhoek: volledig random over 360°
-            arm_angles = jax.random.uniform(angle_key, shape=(n,), minval=0.0, maxval=2*jnp.pi)
-            
+            arm_angles = jax.random.uniform(angle_key, shape=(n,), minval=0.0, maxval=2 * jnp.pi)
+
             # Interpoleer tussen bekende speeds voor betere generalisatie
             norm_speeds_random = jax.random.uniform(speed_key2, shape=(n,), minval=0.01, maxval=1.0)
             speeds_random = norm_speeds_random * max_speed  # echte m/s in simulator voor reward
@@ -227,18 +230,13 @@ class BaseNNController(Controller):
             val_bufs = jax.vmap(lambda v, lv: jnp.append(v, lv))(all_val, last_vals)
 
             advantages_list = [
-                self.compute_gae(r, v, jnp.zeros(len(r)))
-                for r, v in zip(all_rew, val_bufs)
+                self.compute_gae(r, v, jnp.zeros(len(r))) for r, v in zip(all_rew, val_bufs)
             ]
-            returns_list = [
-                adv + v[:-1]
-                for adv, v in zip(advantages_list, val_bufs)
-            ]
+            returns_list = [adv + v[:-1] for adv, v in zip(advantages_list, val_bufs)]
 
-            advantages = jnp.concatenate([
-                (adv - jnp.mean(adv)) / (jnp.std(adv) + 1e-8)
-                for adv in advantages_list
-            ])
+            advantages = jnp.concatenate(
+                [(adv - jnp.mean(adv)) / (jnp.std(adv) + 1e-8) for adv in advantages_list]
+            )
             returns = jnp.concatenate(returns_list)
 
             batch = (
@@ -249,7 +247,6 @@ class BaseNNController(Controller):
                 advantages,
             )
 
-
             total_forward_reward = jnp.sum(all_forward_rewards)
             total_speed_penalty = jnp.sum(all_speed_penalties)
 
@@ -258,8 +255,8 @@ class BaseNNController(Controller):
                 "average_reward": jnp.sum(rew_buf) / len(arm_angles),
                 "average_reward_per_step": jnp.sum(rew_buf) / len(rew_buf),
                 "average_return": jnp.mean(returns),
-                "avg_forward_reward_per_step": total_forward_reward/len(rew_buf),
-                "avg_speed_reward_per_step": total_speed_penalty/len(rew_buf),
+                "avg_forward_reward_per_step": total_forward_reward / len(rew_buf),
+                "avg_speed_reward_per_step": total_speed_penalty / len(rew_buf),
                 "average_advantage": jnp.mean(advantages),
             }
 
@@ -279,11 +276,11 @@ class BaseNNController(Controller):
         for _ in range(self.epochs):
             params, opt_state, loss = update_step_jit(
                 params, opt_state, self.model, batch, self.optimizer
-            ) 
+            )
         log_data["loss"] = loss
         self.logger.log(log_data)
         return params, opt_state
-    
+
     def _make_rollout_fn(
         self,
         env: Environment,
@@ -292,12 +289,11 @@ class BaseNNController(Controller):
         num_steps: int,
     ) -> Callable:
         def rollout_fn(rng, params, angle, speed, norm_speed):
-
             def scan_step(carry, _):
                 env_state, rng = carry
                 rng, subkey = jax.random.split(rng)
                 relative_angle = angle - env_state.observations["disk_rotation"][2]
-                
+
                 local_angle, k_idx = self.to_local_angle_and_sector(relative_angle)
 
                 x = self.build_obs_angle(env_state.observations, local_angle, k_idx, norm_speed)
@@ -314,7 +310,9 @@ class BaseNNController(Controller):
                 env_state = env.step(action_world, env_state)
 
                 curr_pos = env_state.observations["disk_position"]
-                reward, forward_reward, speed_reward = self.angle_reward(prev_pos, curr_pos, angle, speed)
+                reward, forward_reward, speed_reward = self.angle_reward(
+                    prev_pos, curr_pos, angle, speed
+                )
 
                 return (env_state, rng), (
                     x,
@@ -351,7 +349,7 @@ class BaseNNController(Controller):
 
         return jnp.array(advantages)
 
-    def save_controller(self, logger: Logger, name:str ="controller"):
+    def save_controller(self, logger: Logger, name: str = "controller"):
         path = Path(logger.base_folder) / name
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -361,15 +359,19 @@ class BaseNNController(Controller):
     def read_controller(self, path: str):
         with open(path, "rb") as f:
             self.params = pickle.load(f)
-            self.model = ActorCritic(
-                action_dim=self.params["params"]["Dense_2"]["kernel"].shape[1]
-            )
+            self.model = ActorCritic(action_dim=self.params["params"]["Dense_2"]["kernel"].shape[1])
 
     def genome_size(self, configuration: Configuration):
         flat_params, _ = jax.flatten_util.ravel_pytree(self.params)
         return flat_params.shape[0]
-    
-    def act(self, cpg_state: CPGState, control_input: ControlInput, configuration: Configuration, env_state: BaseEnvState):
+
+    def act(
+        self,
+        cpg_state: CPGState,
+        control_input: ControlInput,
+        configuration: Configuration,
+        env_state: BaseEnvState,
+    ):
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
         deltas = jnp.array(control_input) - robot_pos
@@ -392,7 +394,7 @@ class BaseNNController(Controller):
         x = self.build_obs_angle(obs, local_angle, sector, speed)
 
         dist, _ = self.model.apply(self.params, x)
-        
+
         actions = dist.mode()
         shift = 6 * sector
         rotated_actions = jnp.roll(actions, shift)

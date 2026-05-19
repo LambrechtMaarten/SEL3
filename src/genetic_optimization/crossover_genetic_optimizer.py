@@ -8,16 +8,12 @@ from src.jax_extra.jax_extra import jarr
 
 
 class CrossoverGeneticOptimizer(GeneticOptimizer):
-    def select(
-        self, population: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def select(self, population: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         n_select = jnp.size(population, 0) // 2
         selected_idx = jnp.argsort(evaluations)[-n_select:]
         return population[selected_idx], None
 
-    def reproduce(
-        self, genomes: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         n_genomes = genomes.shape[0]
 
         rng, rng_perm, rng_armmask, rng_mutation = jax.random.split(rng, 4)
@@ -74,10 +70,7 @@ class CrossoverGeneticOptimizer(GeneticOptimizer):
 
         # ---- mutation ----
         multiplier = 0.01 * (
-            10
-            ** jax.random.uniform(
-                rng_mutation, minval=0, maxval=2.4, shape=children.shape
-            )
+            10 ** jax.random.uniform(rng_mutation, minval=0, maxval=2.4, shape=children.shape)
         )
 
         mutation = jax.random.normal(rng_mutation, children.shape) * multiplier

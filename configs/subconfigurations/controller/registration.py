@@ -3,10 +3,10 @@ from configs.subconfigurations.controller.controller_configurations import (
     ControllerConfiguration,
 )
 from src.controller.BaseNNController import BaseNNController
+from src.controller.NN_controller_angle import NNControllerAngle
 from src.controller.NN_controller_pretrain import NNControllerPretrain
 from src.controller.one_direction_controller import OneDirectionController
 from src.controller.one_direction_map_elites_controller import OneDirectionMapElitesController
-from src.controller.NN_controller_angle import NNControllerAngle
 
 
 def register():

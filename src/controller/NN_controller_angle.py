@@ -1,18 +1,24 @@
 import jax.numpy as jnp
 import numpy as np
-
 from moojoco.environment.base import BaseEnvState
 
 from configs.config import Configuration
-from src.cpg.cpg_state import CPGState
-from src.controller.NN_controller_pretrain import NNControllerPretrain
 from src.controller.control_input import ControlInput
+from src.controller.NN_controller_pretrain import NNControllerPretrain
+from src.cpg.cpg_state import CPGState
+
 
 class NNControllerAngle(NNControllerPretrain):
     def __init__(self):
         super().__init__()
 
-    def act(self, cpg_state: CPGState, control_input: ControlInput, configuration: Configuration, env_state: BaseEnvState):
+    def act(
+        self,
+        cpg_state: CPGState,
+        control_input: ControlInput,
+        configuration: Configuration,
+        env_state: BaseEnvState,
+    ):
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
         deltas = jnp.array(control_input) - robot_pos
@@ -24,7 +30,7 @@ class NNControllerAngle(NNControllerPretrain):
         # Doel bereikt: geen beweging
         if distance < self.stop_threshold or speed == 0.0:
             return jnp.zeros(30)
-        
+
         # Snelheid: clip zodat snelheid altijd tussen 0 en 1 blijft
         speed = np.clip(speed, 0.001, 1.0)
 
@@ -36,7 +42,7 @@ class NNControllerAngle(NNControllerPretrain):
         x = self.build_obs_angle(obs, local_angle, sector, speed)
 
         dist, _ = self.model.apply(self.params, x)
-        
+
         actions = dist.mode()
         shift = 6 * sector
         rotated_actions = jnp.roll(actions, shift)

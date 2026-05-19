@@ -1,5 +1,7 @@
 import os
 
+import jax.numpy as jnp
+
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subconfigurations.controller.controller_configurations import (
@@ -14,9 +16,6 @@ from configs.subconfigurations.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
 from src.environment.environment import Environment
-import jax.numpy as jnp
-import numpy as np
-import jax
 
 
 def render_saved_controller(controller_path: str):
@@ -46,14 +45,10 @@ def render_saved_controller(controller_path: str):
     frames = []
     i = 0
     j = 0
-    control_inputs = [
-        [2.0,0.0],[-2.0,-2.0],[0.0,0.0]
-    ]
+    control_inputs = [[2.0, 0.0], [-2.0, -2.0], [0.0, 0.0]]
     while i < len(control_inputs) and j < 1000:
         env_state = env_state
-        actions = controller.act(
-            cpg_state, control_inputs[i], configuration, env_state
-        )
+        actions = controller.act(cpg_state, control_inputs[i], configuration, env_state)
 
         env_state = env.step(actions, env_state)
         STOP_THRESHOLD = 0.075

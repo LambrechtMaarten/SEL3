@@ -47,9 +47,7 @@ class CPGState:
         offset_goals = jax.random.normal(rb, self.offset_goals.shape)
         coupled_phase_biases = jax.random.normal(rc, self.coupled_phase_biases.shape)
         frequency = jnp.pi
-        return self.modulate(
-            amplitude_goals, offset_goals, coupled_phase_biases, frequency
-        )
+        return self.modulate(amplitude_goals, offset_goals, coupled_phase_biases, frequency)
 
     def modulate(
         self,

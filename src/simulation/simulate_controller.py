@@ -2,6 +2,7 @@ import os.path
 
 import cv2
 import jax.numpy as jnp
+
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subconfigurations.controller.controller_configurations import (
@@ -18,11 +19,12 @@ from src.controller.control_input import ControlInput
 from src.environment.environment import Environment
 
 key_to_angle = {
-    ord("z"): jnp.pi/2,
-    ord("s"): (jnp.pi/2)*3,
+    ord("z"): jnp.pi / 2,
+    ord("s"): (jnp.pi / 2) * 3,
     ord("q"): jnp.pi,
     ord("d"): 0,
 }
+
 
 def simulate_controller(output_path: str):
     configuration = Configuration(
@@ -34,9 +36,7 @@ def simulate_controller(output_path: str):
         SubConfigurationMap.get_configuration(ControllerConfiguration, "angle"),
     )
     env = Environment(configuration)
-    configuration.controller.controller.read_controller(
-        os.path.join(output_path, "controller")
-    )
+    configuration.controller.controller.read_controller(os.path.join(output_path, "controller"))
     env_state = env.reset(configuration.random.split())
 
     while True:

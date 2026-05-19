@@ -8,16 +8,8 @@ from src.jax_extra.jax_extra import jarr
 
 
 class BasicGeneticOptimizer(GeneticOptimizer):
-    def select(
-        self, population: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
-        return population[
-            jnp.argsort(evaluations)[-jnp.size(population, 0) // 2 :]
-        ], None
+    def select(self, population: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
+        return population[jnp.argsort(evaluations)[-jnp.size(population, 0) // 2 :]], None
 
-    def reproduce(
-        self, genomes: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
-        return jnp.concatenate(
-            [genomes, genomes + jax.random.normal(rng, genomes.shape)]
-        ), None
+    def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
+        return jnp.concatenate([genomes, genomes + jax.random.normal(rng, genomes.shape)]), None

@@ -27,43 +27,59 @@ class CPG:
         return CPGState.reset(self.num_oscillators, self._adjacency_matrix.shape)
 
     def step(self, state: CPGState) -> CPGState:
-        second_order_de = lambda gain, modulator, values, dot_values: \
-            gain * ((gain / 4) * (modulator - values) - dot_values)
-        first_order_de = lambda dot_values: \
-            dot_values
-        phase_de = lambda weights, amplitudes, phases, phase_biases, frequency: \
-            frequency + jnp.sum(
-                weights *
-                amplitudes *
-                jax.vmap(lambda fi_i, rho_i: jnp.sin(phases - fi_i - rho_i))(phases, phase_biases),
-                axis=1)
+        def second_order_de(gain, modulator, values, dot_values):
+            return gain * ((gain / 4) * (modulator - values) - dot_values)
+
+        def first_order_de(dot_values):
+            return dot_values
+
+        def phase_de(weights, amplitudes, phases, phase_biases, frequency):
+            return frequency + jnp.sum(
+                weights
+                * amplitudes
+                * jax.vmap(lambda fi_i, rho_i: jnp.sin(phases - fi_i - rho_i))(
+                    phases, phase_biases
+                ),
+                axis=1,
+            )
 
         def _step(y, dy):
-            return self._solver.solve(current_time=state.time, y=y, delta_time=self._dt, derivative_fn=dy)
+            return self._solver.solve(
+                current_time=state.time, y=y, delta_time=self._dt, derivative_fn=dy
+            )
 
         next_phases = _step(
             state.phases,
-            lambda t, y: phase_de(frequency=state.frequency, amplitudes=state.amplitudes, phases=y,
-                                  phase_biases=state.coupled_phase_biases, weights=self._adjacency_matrix)
+            lambda t, y: phase_de(
+                frequency=state.frequency,
+                amplitudes=state.amplitudes,
+                phases=y,
+                phase_biases=state.coupled_phase_biases,
+                weights=self._adjacency_matrix,
+            ),
         )
         next_d_amplitudes = _step(
             state.d_amplitudes,
-            lambda t, y: second_order_de(gain=self._amplitude_gain, modulator=state.amplitude_goals,
-                                         values=state.amplitudes, dot_values=y)
+            lambda t, y: second_order_de(
+                gain=self._amplitude_gain,
+                modulator=state.amplitude_goals,
+                values=state.amplitudes,
+                dot_values=y,
+            ),
         )
         next_d_offsets = _step(
             state.d_offsets,
-            lambda t, y: second_order_de(gain=self._offset_gain, modulator=state.offset_goals,
-                                         values=state.offsets, dot_values=y)
+            lambda t, y: second_order_de(
+                gain=self._offset_gain,
+                modulator=state.offset_goals,
+                values=state.offsets,
+                dot_values=y,
+            ),
         )
         next_amplitudes = _step(
-            state.amplitudes,
-            lambda t, y: first_order_de(dot_values=state.d_amplitudes)
+            state.amplitudes, lambda t, y: first_order_de(dot_values=state.d_amplitudes)
         )
-        next_offsets = _step(
-            state.offsets,
-            lambda t, y: first_order_de(dot_values=state.d_offsets)
-        )
+        next_offsets = _step(state.offsets, lambda t, y: first_order_de(dot_values=state.d_offsets))
 
         next_outputs = next_offsets + next_amplitudes * jnp.cos(next_phases)
 
@@ -75,5 +91,5 @@ class CPG:
             d_offsets=next_d_offsets,
             offsets=next_offsets,
             outputs=next_outputs,
-            time=state.time + self._dt
+            time=state.time + self._dt,
         )

@@ -38,7 +38,7 @@ class Controller(ABC):
         pass
 
     @abstractmethod
-    def save_controller(self, logger: Logger, name:str ="controller"):
+    def save_controller(self, logger: Logger, name: str = "controller"):
         pass
 
     @abstractmethod

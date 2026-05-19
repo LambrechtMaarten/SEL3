@@ -37,9 +37,7 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
         self.es = None
         self.params = None
 
-    def select(
-        self, population: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def select(self, population: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         """Updates the EvoSax strategy with fitness evaluations.
 
         Initializes the EvoSax strategy on the first call using the
@@ -85,9 +83,7 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
         new_state, metrics = self.es.tell(rng, population, fitness, state, self.params)
         return population, new_state
 
-    def reproduce(
-        self, genomes: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         """Samples a new population from the updated EvoSax strategy.
 
         Args:

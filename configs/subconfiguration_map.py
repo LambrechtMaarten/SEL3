@@ -23,11 +23,18 @@ class SubConfigurationMap:
         if subconfiguration_class not in SubConfigurationMap.subconfiguration_map:
             SubConfigurationMap.subconfiguration_map[subconfiguration_class] = dict()
 
-        if subconfiguration.name in SubConfigurationMap.subconfiguration_map[subconfiguration_class]:
-            raise Exception(f'Subconfiguration "{subconfiguration.name}" '
-                            f'already defined for {subconfiguration_class.__name__}')
+        if (
+            subconfiguration.name
+            in SubConfigurationMap.subconfiguration_map[subconfiguration_class]
+        ):
+            raise Exception(
+                f'Subconfiguration "{subconfiguration.name}" '
+                f"already defined for {subconfiguration_class.__name__}"
+            )
 
-        SubConfigurationMap.subconfiguration_map[subconfiguration_class][subconfiguration.name] = subconfiguration
+        SubConfigurationMap.subconfiguration_map[subconfiguration_class][subconfiguration.name] = (
+            subconfiguration
+        )
 
     @staticmethod
     def get_configuration(subconstructor_class: type[T], name) -> T:
@@ -41,8 +48,8 @@ class SubConfigurationMap:
             CPGConfiguration: "cpg",
             RandomConfiguration: "random",
             GeneticConfiguration: "genetic",
-            ControllerConfiguration: "controller"
+            ControllerConfiguration: "controller",
         }
-        return SubConfigurationMap.subconfiguration_map[
-            subconfiguration_class][json_obj[logname_map[subconfiguration_class]]
+        return SubConfigurationMap.subconfiguration_map[subconfiguration_class][
+            json_obj[logname_map[subconfiguration_class]]
         ]

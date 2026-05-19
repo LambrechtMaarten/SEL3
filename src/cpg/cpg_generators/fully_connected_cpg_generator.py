@@ -14,16 +14,21 @@ class FullyConnectedCPGGenerator(CPGGenerator):
 
     def generate(self, configuration: Configuration) -> CPG:
         morphology = configuration.simulation.morphology_configuration
-        adjacency_matrix = jnp.ones((
-            2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0],
-            2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0]))
+        adjacency_matrix = jnp.ones(
+            (
+                2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0],
+                2 * morphology.number_of_arms * morphology.number_of_segments_per_arm[0],
+            )
+        )
 
         return CPG(1 * adjacency_matrix, configuration)
 
     def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
         return outputs
 
-    def modulate_symmetric_rotation(self, cpg_state: CPGState, clockwise_rotations: int) -> CPGState:
+    def modulate_symmetric_rotation(
+        self, cpg_state: CPGState, clockwise_rotations: int
+    ) -> CPGState:
         # 30 oscillators = 5 arms × 3 segments × 2 directions → 6 oscillators per arm
         shift = 6 * clockwise_rotations
 

@@ -8,6 +8,7 @@ class RandomConfiguration(SubConfiguration):
     """
     This class configures the used random seed in the learning algorithm.
     """
+
     def __init__(self, name, seed: int):
         super().__init__(name)
         self.rng = jax.random.PRNGKey(seed)

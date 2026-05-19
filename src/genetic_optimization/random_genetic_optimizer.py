@@ -14,5 +14,9 @@ class RandomNormalGeneticOptimizer(GeneticOptimizer):
 
     def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         rng1, rng2 = jax.random.split(rng)
-        multiplier = 0.01 * (10 ** jax.random.uniform(rng1, minval=-1, maxval=2.4, shape=genomes.shape))
-        return jnp.concatenate([genomes, genomes + jax.random.normal(rng2, genomes.shape) * multiplier]), None
+        multiplier = 0.01 * (
+            10 ** jax.random.uniform(rng1, minval=-1, maxval=2.4, shape=genomes.shape)
+        )
+        return jnp.concatenate(
+            [genomes, genomes + jax.random.normal(rng2, genomes.shape) * multiplier]
+        ), None

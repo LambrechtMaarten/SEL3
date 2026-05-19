@@ -1,4 +1,3 @@
-import math
 from typing import Callable
 
 import jax
@@ -51,19 +50,13 @@ class OneDirectionController(Controller):
                     cpg_state, env_state, score = val
                     cpg_state = cpg.step(cpg_state)
                     env_state = env.step(
-                        cpg_generator.outputs_to_actions(
-                            cpg_state.outputs, configuration
-                        ),
+                        cpg_generator.outputs_to_actions(cpg_state.outputs, configuration),
                         env_state,
                     )
                     delta_x = env_state.observations["disk_position"][0]
                     # Penalty for movement in wrong direction
-                    side_penalty = 0.3 * jnp.abs(
-                        env_state.observations["disk_position"][1]
-                    )
-                    rotation_penalty = 0.1 * jnp.abs(
-                        env_state.observations["disk_rotation"][0]
-                    )
+                    side_penalty = 0.3 * jnp.abs(env_state.observations["disk_position"][1])
+                    rotation_penalty = 0.1 * jnp.abs(env_state.observations["disk_rotation"][0])
                     score = score + delta_x - side_penalty - rotation_penalty
 
                     return cpg_state, env_state, score
@@ -84,7 +77,7 @@ class OneDirectionController(Controller):
         cpg = cpg_generator.generate(configuration)
         return cpg_generator.body_to_jarr(cpg.reset()).size
 
-    def save_controller(self, logger: Logger, name:str ="controller"):
+    def save_controller(self, logger: Logger, name: str = "controller"):
         # Standard logger needs string, but wandb does not :(
         # noinspection PyTypeChecker
         logger.log_controller(jnp.array_str(self.body_cpg))

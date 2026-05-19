@@ -14,11 +14,7 @@ class Environment:
     def __init__(self, configuration: Configuration):
         self.configuration: Configuration = configuration
         self.env = BrittleStarUndirectedLocomotionEnvironment.from_morphology_and_arena(
-            (
-                MJCFBrittleStarMorphology(
-                    self.configuration.simulation.morphology_configuration
-                )
-            ),
+            (MJCFBrittleStarMorphology(self.configuration.simulation.morphology_configuration)),
             (MJCFAquariumArena(self.configuration.simulation.arena_configuration)),
             self.configuration.simulation.environment_configuration,
             backend="MJX",

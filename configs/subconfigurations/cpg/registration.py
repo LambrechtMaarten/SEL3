@@ -4,7 +4,9 @@ from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
 from src.cpg.cpg_generators.fully_connected_cpg_generator import (
     FullyConnectedCPGGenerator,
 )
-from src.cpg.cpg_generators.fully_connected_symmetric_cpg_generator import FullyConnectedSymmetricCPGGenerator
+from src.cpg.cpg_generators.fully_connected_symmetric_cpg_generator import (
+    FullyConnectedSymmetricCPGGenerator,
+)
 
 
 def register():

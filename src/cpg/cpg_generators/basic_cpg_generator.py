@@ -20,22 +20,16 @@ class BasicCPGGenerator(CPGGenerator):
 
         adjacency_matrix = jnp.zeros((10, 10))
         # Connect oscillators within an arm
-        adjacency_matrix = adjacency_matrix.at[
-            ip_oscillator_indices, oop_oscillator_indices
-        ].set(1)
+        adjacency_matrix = adjacency_matrix.at[ip_oscillator_indices, oop_oscillator_indices].set(1)
         # Connect IP oscillators of neighbouring arms
         adjacency_matrix = adjacency_matrix.at[
             ip_oscillator_indices,
-            jnp.concatenate(
-                (ip_oscillator_indices[1:], jnp.array([ip_oscillator_indices[0]]))
-            ),
+            jnp.concatenate((ip_oscillator_indices[1:], jnp.array([ip_oscillator_indices[0]]))),
         ].set(1)
         # Connect OOP oscillators of neighbouring arms
         adjacency_matrix = adjacency_matrix.at[
             oop_oscillator_indices,
-            jnp.concatenate(
-                (oop_oscillator_indices[1:], jnp.array([oop_oscillator_indices[0]]))
-            ),
+            jnp.concatenate((oop_oscillator_indices[1:], jnp.array([oop_oscillator_indices[0]]))),
         ].set(1)
 
         # Make adjacency matrix symmetric (i.e. make all connections bi-directional)
@@ -46,14 +40,12 @@ class BasicCPGGenerator(CPGGenerator):
     def outputs_to_actions(self, outputs: jarr, configuration: Configuration) -> jarr:
         num_arms = configuration.simulation.morphology_configuration.number_of_arms
         num_oscillators_per_arm = 2
-        num_segments_per_arm = configuration.simulation.morphology_configuration.number_of_segments_per_arm[
-            0
-        ]
+        num_segments_per_arm = (
+            configuration.simulation.morphology_configuration.number_of_segments_per_arm[0]
+        )
 
         cpg_outputs_per_arm = outputs.reshape((num_arms, num_oscillators_per_arm))
-        cpg_outputs_per_segment = cpg_outputs_per_arm.repeat(
-            num_segments_per_arm, axis=0
-        )
+        cpg_outputs_per_segment = cpg_outputs_per_arm.repeat(num_segments_per_arm, axis=0)
 
         actions = cpg_outputs_per_segment.flatten()
         return actions
@@ -112,9 +104,7 @@ class BasicCPGGenerator(CPGGenerator):
             )
             _R = _R.at[ip_oscillator_index].set(max_joint_limit)
             _R = _R.at[oop_oscillator_index].set(max_joint_limit)
-            _phase_bias_pairs = [
-                (ip_oscillator_index, oop_oscillator_index, jnp.pi / 2)
-            ]
+            _phase_bias_pairs = [(ip_oscillator_index, oop_oscillator_index, jnp.pi / 2)]
             return _R, _phase_bias_pairs
 
         def modulate_right_rower(
@@ -125,28 +115,20 @@ class BasicCPGGenerator(CPGGenerator):
             )
             _R = _R.at[ip_oscillator_index].set(max_joint_limit)
             _R = _R.at[oop_oscillator_index].set(max_joint_limit)
-            _phase_bias_pairs = [
-                (ip_oscillator_index, oop_oscillator_index, -jnp.pi / 2)
-            ]
+            _phase_bias_pairs = [(ip_oscillator_index, oop_oscillator_index, -jnp.pi / 2)]
             return _R, _phase_bias_pairs
 
         def phase_biases_second_rowers(
             _left_arm_index: int, _right_arm_index: int
         ) -> List[Tuple[int, int, float]]:
-            left_ip_oscillator_index, _ = get_oscillator_indices_for_arm(
-                arm_index=_left_arm_index
-            )
+            left_ip_oscillator_index, _ = get_oscillator_indices_for_arm(arm_index=_left_arm_index)
             right_ip_oscillator_index, _ = get_oscillator_indices_for_arm(
                 arm_index=_right_arm_index
             )
-            _phase_bias_pairs = [
-                (left_ip_oscillator_index, right_ip_oscillator_index, jnp.pi)
-            ]
+            _phase_bias_pairs = [(left_ip_oscillator_index, right_ip_oscillator_index, jnp.pi)]
             return _phase_bias_pairs
 
-        offset_goals = modulate_leading_arm(
-            _X=offset_goals, _arm_index=leading_arm_index
-        )
+        offset_goals = modulate_leading_arm(_X=offset_goals, _arm_index=leading_arm_index)
 
         amplitude_goals, phb = modulate_left_rower(
             _R=amplitude_goals, _arm_index=left_rower_arm_indices[0]
@@ -174,12 +156,8 @@ class BasicCPGGenerator(CPGGenerator):
         )
 
         for oscillator1, oscillator2, bias in phases_bias_pairs:
-            coupled_phase_biases = coupled_phase_biases.at[
-                oscillator1, oscillator2
-            ].set(bias)
-            coupled_phase_biases = coupled_phase_biases.at[
-                oscillator2, oscillator1
-            ].set(-bias)
+            coupled_phase_biases = coupled_phase_biases.at[oscillator1, oscillator2].set(bias)
+            coupled_phase_biases = coupled_phase_biases.at[oscillator2, oscillator1].set(-bias)
 
         # noinspection PyUnresolvedReferences
         return cpg_state.replace(

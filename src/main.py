@@ -1,7 +1,6 @@
 import sys
 
 import jax.debug
-import jax.numpy as jnp
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
@@ -16,11 +15,10 @@ from configs.subconfigurations.register import register
 from configs.subconfigurations.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
-
 from src.render.render_video import render_saved_controller
+from src.simulation.robot_controller import simulate_controller_joystick
 from src.simulation.simulate_controller import simulate_controller
 from src.training.train_archive import train_archive
-from src.simulation.robot_controller import simulate_controller_joystick
 
 if __name__ == "__main__":
     valid_commands = {
@@ -54,8 +52,8 @@ if __name__ == "__main__":
             SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
         )
         groups, edges = train_archive(configuration)
-        jax.debug.log("{x}",x=edges)
-        jax.debug.log("{x}",x=groups)
+        jax.debug.log("{x}", x=edges)
+        jax.debug.log("{x}", x=groups)
 
     elif sys.argv[1] == "train_network":
         configuration = Configuration(

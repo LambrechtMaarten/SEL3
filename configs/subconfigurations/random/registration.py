@@ -3,10 +3,4 @@ from configs.subconfigurations.random.random_configurations import RandomConfigu
 
 
 def register():
-    SubConfigurationMap.add_configuration(
-        RandomConfiguration,
-        RandomConfiguration(
-            "standard",
-            0
-        )
-    )
+    SubConfigurationMap.add_configuration(RandomConfiguration, RandomConfiguration("standard", 0))

@@ -17,15 +17,11 @@ class GeneticOptimizer(ABC):
         return jax.random.normal(rng, (population_size, genome_size))
 
     @abstractmethod
-    def select(
-        self, population: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def select(self, population: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         pass
 
     @abstractmethod
-    def reproduce(
-        self, genomes: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         pass
 
     def generation(
@@ -46,7 +42,10 @@ class GeneticOptimizer(ABC):
             if i != 0:
                 print(f"Generatie {i + 1:3d}/{iterations} | reproduceren...", flush=True)
                 population, state = self.reproduce(selections, evaluations, _rng, state)
-            print(f"Generatie {i + 1:3d}/{iterations} | evalueren ({len(population)} genomes)...", flush=True)
+            print(
+                f"Generatie {i + 1:3d}/{iterations} | evalueren ({len(population)} genomes)...",
+                flush=True,
+            )
             evaluations = evaluator(population)
             selections, state = self.select(population, evaluations, __rng, state)
             logger.log_genetic_generation(population, selections, evaluations, i)
@@ -59,7 +58,7 @@ class GeneticOptimizer(ABC):
                 f"best: {float(jnp.max(scores)):.4f} | "
                 f"gem: {float(jnp.mean(scores)):.4f} | "
                 f"tijd: {elapsed:.1f}s",
-                flush=True
+                flush=True,
             )
 
         return selections, evaluations

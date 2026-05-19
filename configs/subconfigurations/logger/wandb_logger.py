@@ -1,12 +1,14 @@
 import os
-from ast import List
 from pathlib import Path
+
+import jax.numpy as jnp
 import numpy as np
 import wandb
+
 from configs.subconfigurations.logger.logger import Logger
 from src.jax_extra.jax_extra import jarr
 from src.render.render import save_video
-import jax.numpy as jnp
+
 
 def serialize(obj):
     """
@@ -56,10 +58,7 @@ class WandbLogger(Logger):
             config_dict = serialize(self.configuration)
 
         self.run = wandb.init(
-            project=self.project,
-            name=self.name,
-            dir=self.base_folder,
-            config=config_dict
+            project=self.project, name=self.name, dir=self.base_folder, config=config_dict
         )
 
     def log_configuration(self):
@@ -69,7 +68,9 @@ class WandbLogger(Logger):
     def log(self, logging: dict):
         wandb.log(logging)
 
-    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int):
+    def log_genetic_generation(
+        self, population: jarr, selections: jarr, evaluations: jarr, generation: int
+    ):
         scores = evaluations[1] if isinstance(evaluations, tuple) else evaluations
         metrics = {
             "generation": generation,

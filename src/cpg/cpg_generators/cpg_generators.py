@@ -22,17 +22,19 @@ class CPGGenerator(ABC):
         pass
 
     @abstractmethod
-    def modulate_symmetric_rotation(self, cpg_state: CPGState, clockwise_rotations: int) -> CPGState:
+    def modulate_symmetric_rotation(
+        self, cpg_state: CPGState, clockwise_rotations: int
+    ) -> CPGState:
         pass
 
     @staticmethod
     def modulate_body(cpg_state: CPGState, body: jarr) -> CPGState:
         i = 0
-        frequency = body[i:i + 1][0]
+        frequency = body[i : i + 1][0]
         i += 1
-        amplitude_goals = body[i:i + cpg_state.amplitude_goals.size]
+        amplitude_goals = body[i : i + cpg_state.amplitude_goals.size]
         i += cpg_state.amplitude_goals.size
-        offset_goals = body[i:i + cpg_state.offset_goals.size]
+        offset_goals = body[i : i + cpg_state.offset_goals.size]
         i += cpg_state.offset_goals.size
         coupled_phase_biases = body[i:].reshape(cpg_state.coupled_phase_biases.shape)
 
@@ -41,14 +43,16 @@ class CPGGenerator(ABC):
             frequency=frequency,
             amplitude_goals=amplitude_goals,
             offset_goals=offset_goals,
-            coupled_phase_biases=coupled_phase_biases
+            coupled_phase_biases=coupled_phase_biases,
         )
 
     @staticmethod
     def body_to_jarr(cpg_state: CPGState) -> jarr:
-        return jnp.concatenate([
-            jnp.atleast_1d(cpg_state.frequency),
-            cpg_state.amplitude_goals,
-            cpg_state.offset_goals,
-            cpg_state.coupled_phase_biases.ravel()
-        ]).flatten()
+        return jnp.concatenate(
+            [
+                jnp.atleast_1d(cpg_state.frequency),
+                cpg_state.amplitude_goals,
+                cpg_state.offset_goals,
+                cpg_state.coupled_phase_biases.ravel(),
+            ]
+        ).flatten()

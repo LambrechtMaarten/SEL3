@@ -1,4 +1,4 @@
-from typing import Callable, Any, Tuple
+from typing import Any, Callable, Tuple
 
 import jax
 from jax import numpy as jnp
@@ -32,8 +32,8 @@ class OneDirectionMapElitesController(Controller):
         return cpg_generator.modulate_body(cpg_state, self.body_cpg)
 
     @staticmethod
-    def evaluator(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr,jarr]]:
-        def evaluator(arr: jarr) -> Tuple[jarr,jarr]:
+    def evaluator(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr, jarr]]:
+        def evaluator(arr: jarr) -> Tuple[jarr, jarr]:
             env = Environment(configuration)
 
             def _evaluator(_arr: jarr, _rng: jarr) -> tuple[Any, Any, Any]:
@@ -49,7 +49,9 @@ class OneDirectionMapElitesController(Controller):
                     cpg_state = cpg.step(cpg_state)
                     actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
                     max_force = env.action_space.high[0]
-                    energy += jnp.sum(jnp.pow(max_force - jnp.clip(jnp.abs(actions), a_max=max_force), 2))
+                    energy += jnp.sum(
+                        jnp.pow(max_force - jnp.clip(jnp.abs(actions), a_max=max_force), 2)
+                    )
                     env_state = env.step(
                         actions,
                         env_state,
@@ -59,17 +61,29 @@ class OneDirectionMapElitesController(Controller):
                 cpg_state, env_state, energy = jax.lax.fori_loop(
                     0, max_steps, step_fn, (cpg_state, env_state, 0)
                 )
-                return energy, env_state.observations["disk_position"][0], env_state.observations["disk_position"][1]
+                return (
+                    energy,
+                    env_state.observations["disk_position"][0],
+                    env_state.observations["disk_position"][1],
+                )
 
             new_rngs = jax.random.split(rng, len(arr))
             energies, x_poss, y_poss = jax.vmap(_evaluator)(arr, new_rngs)
             scores = energies
 
             groups = jnp.floor(x_poss * 5).astype(int)
-            group_sizes = jnp.count_nonzero(jnp.equal(groups,jnp.repeat(groups, groups.shape[0]).reshape((groups.shape[0], groups.shape[0]))), axis=0)
-            max_scores_in_group = jnp.max(jnp.where(groups[:, None] == groups[None, :], scores, -jnp.inf), axis=1)
+            group_sizes = jnp.count_nonzero(
+                jnp.equal(
+                    groups,
+                    jnp.repeat(groups, groups.shape[0]).reshape((groups.shape[0], groups.shape[0])),
+                ),
+                axis=0,
+            )
+            max_scores_in_group = jnp.max(
+                jnp.where(groups[:, None] == groups[None, :], scores, -jnp.inf), axis=1
+            )
             rescaled_scores = scores / max_scores_in_group
-            rescaled_scores = rescaled_scores * (.99 ** group_sizes)
+            rescaled_scores = rescaled_scores * (0.99**group_sizes)
             # jax.debug.log("{y}", y=groups)
             # jax.debug.log("{y}", y=scores)
 
@@ -78,8 +92,8 @@ class OneDirectionMapElitesController(Controller):
         return evaluator
 
     @staticmethod
-    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr,jarr]]:
-        def evaluator(arr: jarr) -> Tuple[jarr,jarr]:
+    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr, jarr]]:
+        def evaluator(arr: jarr) -> Tuple[jarr, jarr]:
             env = Environment(configuration)
 
             def _evaluator(_arr: jarr, _rng: jarr) -> tuple[Any, Any, Any, Any]:
@@ -94,18 +108,47 @@ class OneDirectionMapElitesController(Controller):
                     i, cpg_state, env_state, energy, edges = val
                     cpg_state = cpg.step(cpg_state)
                     actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
-                    energy += jnp.sum((env.action_space.high[0] - jnp.clip(jnp.abs(actions), a_max=env.action_space.high[0])) ** 2)
+                    energy += jnp.sum(
+                        (
+                            env.action_space.high[0]
+                            - jnp.clip(jnp.abs(actions), a_max=env.action_space.high[0])
+                        )
+                        ** 2
+                    )
                     env_state = env.step(
                         actions,
                         env_state,
                     )
 
-                    return i+1, cpg_state, env_state, energy, edges.at[i].set(env_state.observations["joint_position"])
+                    return (
+                        i + 1,
+                        cpg_state,
+                        env_state,
+                        energy,
+                        edges.at[i].set(env_state.observations["joint_position"]),
+                    )
 
                 i, cpg_state, env_state, energy, edges = jax.lax.fori_loop(
-                    0, max_steps, step_fn, (0, cpg_state, env_state, 0, jnp.broadcast_to(env_state.observations["joint_position"], (800,) + env_state.observations["joint_position"].shape))
+                    0,
+                    max_steps,
+                    step_fn,
+                    (
+                        0,
+                        cpg_state,
+                        env_state,
+                        0,
+                        jnp.broadcast_to(
+                            env_state.observations["joint_position"],
+                            (800,) + env_state.observations["joint_position"].shape,
+                        ),
+                    ),
                 )
-                return energy, env_state.observations["disk_position"][0], env_state.observations["disk_position"][1], edges
+                return (
+                    energy,
+                    env_state.observations["disk_position"][0],
+                    env_state.observations["disk_position"][1],
+                    edges,
+                )
 
             new_rngs = jax.random.split(rng, len(arr))
             energies, x_poss, y_poss, edges = jax.vmap(_evaluator)(arr, new_rngs)
@@ -115,13 +158,12 @@ class OneDirectionMapElitesController(Controller):
 
         return evaluator
 
-
     def genome_size(self, configuration: Configuration) -> int:
         cpg_generator = configuration.cpg.cpg_generator
         cpg = cpg_generator.generate(configuration)
         return cpg_generator.body_to_jarr(cpg.reset()).size
 
-    def save_controller(self, logger: Logger, name:str ="controller"):
+    def save_controller(self, logger: Logger, name: str = "controller"):
         # Standard logger needs string, but wandb does not :(
         # noinspection PyTypeChecker
         logger.log_controller(jnp.array_str(self.body_cpg))
