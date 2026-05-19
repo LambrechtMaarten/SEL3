@@ -47,18 +47,10 @@ def render_saved_controller(controller_path: str):
     frames = []
     i = 0
     j = 0
-    d = 2
-    x = 0.0 #d * np.cos(np.deg2rad(36))
-    y = -4.0 #d * np.sin(np.deg2rad(36))
     control_inputs = [
-        [x,y],
+        [2.0,0.0],[-2.0,-2.0],[0.0,0.0]
     ]
-    reward = 0.0
-    tracking_r = 0.0
-    prev_pos = jnp.array([0.0,0.0])
-    target = 0.003644313
-    velocity_err = 0.0
-    while i < len(control_inputs) and j < 800:
+    while i < len(control_inputs) and j < 1000:
         env_state = env_state
         actions = controller.act(
             cpg_state, control_inputs[i], configuration, env_state
@@ -69,39 +61,14 @@ def render_saved_controller(controller_path: str):
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
 
-        delta = robot_pos - prev_pos
-
-        direction = jnp.array([
-            jnp.cos(0.0),
-            jnp.sin(0.0)
-        ])
-
-        velocity = jnp.dot(delta, direction)
-
-        # SPEED TRACKING
-        tracking_reward = -(
-            (velocity - target)
-            / (target + 0.01)
-        ) ** 2
-        velocity_err += velocity
-
-        reward += 0.0005 * jnp.mean(actions ** 2)
-        tracking_r += tracking_reward
-
         deltas = jnp.array(control_inputs[i]) - robot_pos
         prev_pos = robot_pos
         distance = jnp.linalg.norm(deltas)
         if distance < STOP_THRESHOLD:
-            print("REACHED GOAL")
-            print("REACHED GOAL")
-            print("REACHED GOAL")
             i += 1
             j = 0
         j += 1
 
         frames.append(env.render(env_state))
-    print(-reward)
-    print(tracking_r)
-    print(velocity_err)
 
     configuration.logger.log_video(frames, "video.mp4")

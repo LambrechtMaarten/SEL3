@@ -76,9 +76,9 @@ class BaseNNController(Controller, ABC):
 
         speed_error = (forward_velocity - speed_target) ** 2
 
-        speed_reward = -speed_error * 1.5
+        speed_reward = -speed_error * 10
 
-        return (forward_velocity * 1) + speed_reward, forward_velocity, speed_reward
+        return (forward_velocity * 0.3) + speed_reward, forward_velocity*0.3, speed_reward
 
     def build_obs_angle(self, env_state, angle, sector=0, speed=1.0):
         obs = env_state.observations
@@ -257,7 +257,7 @@ class BaseNNController(Controller, ABC):
                 env_state = env.step(action_world, env_state)
 
                 curr_pos = env_state.observations["disk_position"]
-                reward, forward_reward, speed_reward = self.angle_reward(prev_pos, curr_pos, angle, speed, action_world)
+                reward, forward_reward, speed_reward = self.angle_reward(prev_pos, curr_pos, angle, speed)
 
                 return (env_state, rng), (
                     x,
@@ -327,8 +327,6 @@ class BaseNNController(Controller, ABC):
         # (robot vertraagt automatisch als het doel nadert)
         speed = np.clip(distance, 0.001, 1.0)
 
-        # To prevent getting stuck
-        rng = jax.random.PRNGKey(np.random.randint(0, 1_000_000))
         
         print("SPEED: ", speed)
         print("SECTOR: ", sector)
@@ -344,7 +342,7 @@ class BaseNNController(Controller, ABC):
         shift = 6 * sector
         rotated_actions = jnp.roll(actions, shift)
 
-        # Directe joint actions — geen CPG tussenstap
+        # Directe joint actions geen CPG tussenstap
         return rotated_actions
     
 

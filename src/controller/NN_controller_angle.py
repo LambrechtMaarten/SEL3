@@ -41,8 +41,6 @@ class NNControllerAngle(NNControllerPretrain):
 
         relative_angle = angle - rot
         local_angle, sector = self.to_local_angle_and_sector(relative_angle)
-
-        rng = jax.random.PRNGKey(np.random.randint(0, 1_000_000))
         
         print("SPEED: ", speed)
         print("SECTOR: ", sector)
