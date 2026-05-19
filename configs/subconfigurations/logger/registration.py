@@ -1,8 +1,8 @@
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.logger.logger import Logger
-from configs.subcontrollers.logger.silent_logger import SilentLogger
-from configs.subcontrollers.logger.standard_logger import StandardLogger
-from configs.subcontrollers.logger.wandb_logger import WandbLogger
+from configs.subconfigurations.logger.logger import Logger
+from configs.subconfigurations.logger.silent_logger import SilentLogger
+from configs.subconfigurations.logger.standard_logger import StandardLogger
+from configs.subconfigurations.logger.wandb_logger import WandbLogger
 
 
 def register():

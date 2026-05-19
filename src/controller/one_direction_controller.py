@@ -6,7 +6,7 @@ from jax import numpy as jnp
 from moojoco.environment.base import BaseEnvState
 
 from configs.config import Configuration
-from configs.subcontrollers.logger.logger import Logger
+from configs.subconfigurations.logger.logger import Logger
 from src.controller.control_input import ControlInput
 from src.controller.controller import Controller
 from src.cpg.cpg_state import CPGState
@@ -30,24 +30,7 @@ class OneDirectionController(Controller):
         env_state: BaseEnvState,
     ):
         cpg_generator = configuration.cpg.cpg_generator
-        if control_input == ControlInput.ZZZ:
-            return cpg_generator.modulate_body(
-                cpg_state,
-                cpg_generator.body_to_jarr(
-                    cpg_generator.generate(configuration).reset()
-                ),
-            )
-
-        rotation = env_state.observations["disk_rotation"][2]
-        wanted_direction = control_input.value
-        rotated_direction = (
-            (wanted_direction - rotation) % (2 * math.pi) + (2 * math.pi)
-        ) % (2 * math.pi)
-        index = int(rotated_direction / (2 * math.pi) * 5)
-        print(rotation, wanted_direction, rotated_direction, index)
-        return cpg_generator.modulate_symmetric_rotation(
-            cpg_generator.modulate_body(cpg_state, self.body_cpg), index
-        )
+        return cpg_generator.modulate_body(cpg_state, self.body_cpg)
 
     def train_controller(
         self,

@@ -5,14 +5,14 @@ import numpy as np
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.controller.controller_configurations import (
+from configs.subconfigurations.controller.controller_configurations import (
     ControllerConfiguration,
 )
-from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
-from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
-from configs.subcontrollers.logger.logger import Logger
-from configs.subcontrollers.random.random_configurations import RandomConfiguration
-from configs.subcontrollers.simulation.simulation_configurations import (
+from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
+from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
+from configs.subconfigurations.logger.logger import Logger
+from configs.subconfigurations.random.random_configurations import RandomConfiguration
+from configs.subconfigurations.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
 from src.controller.control_input import ControlInput
@@ -30,7 +30,7 @@ def simulate_controller(output_path: str):
     )
     env = Environment(configuration)
     configuration.controller.controller.read_controller(
-        os.path.join(output_path, "controller_200")
+        os.path.join(output_path, "controller")
     )
     env_state = env.reset(configuration.random.split())
 
@@ -45,7 +45,12 @@ def simulate_controller(output_path: str):
         if key == 27:
             break
 
-        control_input = (0.0,0.0)
+        control_input = {
+            ord("z"): ControlInput.UP,
+            ord("s"): ControlInput.DOWN,
+            ord("q"): ControlInput.LEFT,
+            ord("d"): ControlInput.RIGHT,
+        }.get(key, ControlInput.WAIT)
 
         # act geeft directe joint actions terug — geen CPG tussenstap
         actions = configuration.controller.controller.act(

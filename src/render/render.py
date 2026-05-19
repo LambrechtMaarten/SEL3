@@ -6,7 +6,7 @@ from moojoco.environment.base import MuJoCoEnvironmentConfiguration
 
 
 def save_video(
-        images: List[np.ndarray | None],
+        images: np.ndarray,
         path: str | None = None
 ) -> str | None:
     media.write_video(path=path, images=images)

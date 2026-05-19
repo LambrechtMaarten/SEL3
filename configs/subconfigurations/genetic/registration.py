@@ -1,5 +1,5 @@
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
+from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
 from src.genetic_optimization.basic_genetic_optimizer import BasicGeneticOptimizer
 from src.genetic_optimization.crossover_genetic_optimizer import (
     CrossoverGeneticOptimizer,
@@ -35,7 +35,17 @@ def register():
 
     SubConfigurationMap.add_configuration(
         GeneticConfiguration,
-        GeneticConfiguration("long", 100, 10, RandomNormalGeneticOptimizer()),
+        GeneticConfiguration("map elites", 400, 50, RandomNormalGeneticOptimizer()),
+    )
+
+    SubConfigurationMap.add_configuration(
+        GeneticConfiguration,
+        GeneticConfiguration("long", 20, 100, RandomNormalGeneticOptimizer()),
+    )
+
+    SubConfigurationMap.add_configuration(
+        GeneticConfiguration,
+        GeneticConfiguration("wide", 100, 20, RandomNormalGeneticOptimizer()),
     )
 
     SubConfigurationMap.add_configuration(

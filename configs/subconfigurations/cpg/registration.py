@@ -1,5 +1,5 @@
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
+from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
 from src.cpg.cpg_generators.basic_cpg_generator import BasicCPGGenerator
 from src.cpg.cpg_generators.fully_connected_cpg_generator import (
     FullyConnectedCPGGenerator,
@@ -14,7 +14,12 @@ def register():
 
     SubConfigurationMap.add_configuration(
         CPGConfiguration,
-        CPGConfiguration("fully_connected", FullyConnectedCPGGenerator()),
+        CPGConfiguration("fully connected", FullyConnectedCPGGenerator()),
+    )
+
+    SubConfigurationMap.add_configuration(
+        CPGConfiguration,
+        CPGConfiguration("symmetric", FullyConnectedSymmetricCPGGenerator()),
     )
 
     SubConfigurationMap.add_configuration(

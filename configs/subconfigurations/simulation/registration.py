@@ -4,7 +4,7 @@ from biorobot.brittle_star.mjcf.arena.aquarium import AquariumArenaConfiguration
 from biorobot.brittle_star.mjcf.morphology.specification.default import default_brittle_star_morphology_specification
 
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
+from configs.subconfigurations.simulation.simulation_configurations import SimulationConfiguration
 from src.numerical_analysis.euler_solver import EulerSolver
 
 

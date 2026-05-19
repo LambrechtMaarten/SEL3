@@ -1,10 +1,12 @@
 import os
+from ast import List
 from pathlib import Path
 import numpy as np
 import wandb
-from configs.subcontrollers.logger.logger import Logger
+from configs.subconfigurations.logger.logger import Logger
 from src.jax_extra.jax_extra import jarr
 from src.render.render import save_video
+import jax.numpy as jnp
 
 def serialize(obj):
     """
@@ -45,7 +47,6 @@ class WandbLogger(Logger):
         super().__init__(name)
         self.project = project
         self.run = None
-        self.generation = 0
 
     def init_logger(self):
         os.makedirs(self.base_folder, exist_ok=True)
@@ -65,23 +66,21 @@ class WandbLogger(Logger):
         if hasattr(self, "configuration"):
             wandb.config.update(serialize(self.configuration))
 
-    def log(self, logging: dict):
-        wandb.log(logging)
+    def log(self, name: str, logging: str):
+        wandb.log({name: logging})
 
-    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr):
-        evals = np.array(evaluations)
-
+    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int):
+        scores = evaluations[1] if isinstance(evaluations, tuple) else evaluations
         metrics = {
-            "generation": self.generation,
-            "fitness/best": float(np.max(evals)),
-            "fitness/mean": float(np.mean(evals)),
-            "fitness/min": float(np.min(evals)),
-            "fitness/std": float(np.std(evals)),
-            "population/size": int(len(evals)),
+            "generation": generation,
+            "population/size": int(len(scores)),
+            "fitness/best": float(jnp.max(scores)),
+            "fitness/mean": float(jnp.mean(scores)),
+            "fitness/min": float(jnp.min(scores)),
+            "fitness/std": float(jnp.std(scores)),
         }
 
         wandb.log(metrics)
-        self.generation += 1
 
     def log_video(self, frames, name: str, fps: int = 30):
         frames = np.array(frames)
