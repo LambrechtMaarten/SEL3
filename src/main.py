@@ -20,28 +20,29 @@ from configs.subconfigurations.simulation.simulation_configurations import (
 from src.render.render_video import render_saved_controller
 from src.simulation.simulate_controller import simulate_controller
 from src.training.train_archive import train_archive
-from src.training.train_controller import train_controller
 from src.simulation.robot_controller import simulate_controller_joystick
 
 if __name__ == "__main__":
+    valid_commands = {
+        "map-elites",
+        "train_network",
+        "train_network_pretrain",
+        "simulate",
+        "simulate_controller",
+        "render",
+    }
+
     if len(sys.argv) < 2:
-        print(
-            'you need to say "train", "train_network", "simulate" or "render" '
-            "as the first arg or it doesn't know what to do"
-        )
+        print("Error: geen commando opgegeven.")
+        print(f"Gebruik één van: {', '.join(valid_commands)}")
+        sys.exit(1)
+
+    if sys.argv[1] not in valid_commands:
+        print(f'Error: onbekend commando "{sys.argv[1]}"')
+        print(f"Gebruik één van: {', '.join(valid_commands)}")
+        sys.exit(1)
 
     register()
-
-    if sys.argv[1] == "train":
-        configuration = Configuration(
-            SubConfigurationMap.get_configuration(Logger, "wandb"),
-            SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
-            SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
-            SubConfigurationMap.get_configuration(GeneticConfiguration, "short"),
-            SubConfigurationMap.get_configuration(ControllerConfiguration, "standard"),
-        )
-        train_controller(configuration)
 
     if sys.argv[1] == "map-elites":
         configuration = Configuration(
@@ -68,6 +69,7 @@ if __name__ == "__main__":
 
         controller = configuration.controller.controller
         controller.train_controller(configuration)
+        print(f"Controller opgeslagen in: {configuration.logger.base_folder}")
     elif sys.argv[1] == "train_network_pretrain":
         # Gebruik: python -m src.main train_network_archive <pad/naar/archive/>
         # Het archief bevat selections.npy en x_positions.npy van map-elites.

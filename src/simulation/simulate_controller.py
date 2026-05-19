@@ -1,8 +1,7 @@
 import os.path
 
 import cv2
-import numpy as np
-
+import jax.numpy as jnp
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
 from configs.subconfigurations.controller.controller_configurations import (
@@ -18,15 +17,21 @@ from configs.subconfigurations.simulation.simulation_configurations import (
 from src.controller.control_input import ControlInput
 from src.environment.environment import Environment
 
+key_to_angle = {
+    ord("z"): jnp.pi/2,
+    ord("s"): (jnp.pi/2)*3,
+    ord("q"): jnp.pi,
+    ord("d"): 0,
+}
 
 def simulate_controller(output_path: str):
     configuration = Configuration(
         SubConfigurationMap.get_configuration(Logger, "silent_logger"),
         SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
-        SubConfigurationMap.get_configuration(CPGConfiguration, "standard"),
+        SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
         SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
         SubConfigurationMap.get_configuration(GeneticConfiguration, "evosax"),
-        SubConfigurationMap.get_configuration(ControllerConfiguration, "network_pretrain"),
+        SubConfigurationMap.get_configuration(ControllerConfiguration, "angle"),
     )
     env = Environment(configuration)
     configuration.controller.controller.read_controller(
@@ -45,12 +50,8 @@ def simulate_controller(output_path: str):
         if key == 27:
             break
 
-        control_input = {
-            ord("z"): ControlInput.UP,
-            ord("s"): ControlInput.DOWN,
-            ord("q"): ControlInput.LEFT,
-            ord("d"): ControlInput.RIGHT,
-        }.get(key, ControlInput.WAIT)
+        angle = key_to_angle.get(key, None)
+        control_input = ControlInput(0.0 if angle is None else 1.0, angle)
 
         # act geeft directe joint actions terug — geen CPG tussenstap
         actions = configuration.controller.controller.act(
@@ -59,6 +60,6 @@ def simulate_controller(output_path: str):
         env_state = env.step(actions, env_state)
         frame = env.render(env_state)
 
-        cv2.imshow("Simulation", np.array(frame))
+        cv2.imshow("Simulation", jnp.array(frame))
 
     cv2.destroyAllWindows()

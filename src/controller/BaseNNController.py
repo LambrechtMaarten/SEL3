@@ -60,7 +60,7 @@ class BaseNNController(Controller):
 
     @staticmethod
     def evaluator(configuration, rng):
-        pass
+        raise Exception("Not implemented")
 
     def angle_reward(self, prev_pos, curr_pos, angle, speed_target):
         delta = curr_pos[:2] - prev_pos[:2]
@@ -74,8 +74,7 @@ class BaseNNController(Controller):
 
         return (forward_velocity * 0.3) + speed_reward, forward_velocity*0.3, speed_reward
 
-    def build_obs_angle(self, env_state, angle, sector=0, speed=1.0):
-        obs = env_state.observations
+    def build_obs_angle(self, obs, angle, sector=0, speed=1.0):
         # Encodeer hoek als sin/cos zodat 0° en 360° hetzelfde zijn
         angle_enc = jnp.array([jnp.sin(angle), jnp.cos(angle)])
 
@@ -116,7 +115,7 @@ class BaseNNController(Controller):
         env = Environment(configuration)
 
         dummy_env = env.reset(rng)
-        dummy_input = self.build_obs_angle(dummy_env, 0.0)
+        dummy_input = self.build_obs_angle(dummy_env.observations, 0.0)
         if self.params is None:
             params = self.model.init(rng, dummy_input)
             self.params = params
@@ -225,7 +224,7 @@ class BaseNNController(Controller):
                 
                 local_angle, k_idx = self.to_local_angle_and_sector(relative_angle)
 
-                x = self.build_obs_angle(env_state, local_angle, k_idx, norm_speed)
+                x = self.build_obs_angle(env_state.observations, local_angle, k_idx, norm_speed)
                 dist, value = model.apply(params, x)
 
                 action = dist.sample(seed=subkey)
@@ -307,7 +306,7 @@ class BaseNNController(Controller):
         # (robot vertraagt automatisch als het doel nadert)
         speed = np.clip(distance, 0.001, 1.0)
 
-        x = self.build_obs_angle(env_state, local_angle, sector, speed)
+        x = self.build_obs_angle(obs, local_angle, sector, speed)
 
         dist, _ = self.model.apply(self.params, x)
         

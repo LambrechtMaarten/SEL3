@@ -2,19 +2,20 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.controller.NN_controller_pretrain import NNControllerPretrain
+from src.controller.control_input import ControlInput
 
 class NNControllerAngle(NNControllerPretrain):
     def __init__(self):
         super().__init__()
 
-    def act(self, cpg_state, control_input, configuration, env_state):
+    def act(self, cpg_state, control_input: ControlInput, configuration, env_state):
         obs = env_state.observations
         robot_pos = obs["disk_position"][0:2]
         deltas = jnp.array(control_input) - robot_pos
         distance = jnp.linalg.norm(deltas)
 
-        angle = control_input[0]
-        speed = control_input[1]
+        angle = control_input.angle
+        speed = control_input.speed
 
         # Doel bereikt: geen beweging
         if distance < self.stop_threshold or speed == 0.0:
@@ -28,7 +29,7 @@ class NNControllerAngle(NNControllerPretrain):
         relative_angle = angle - rot
         local_angle, sector = self.to_local_angle_and_sector(relative_angle)
 
-        x = self.build_obs_angle(env_state, local_angle, sector, speed)
+        x = self.build_obs_angle(obs, local_angle, sector, speed)
 
         dist, _ = self.model.apply(self.params, x)
         

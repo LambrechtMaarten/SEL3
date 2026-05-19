@@ -13,7 +13,6 @@ from configs.subconfigurations.register import register
 from configs.subconfigurations.simulation.simulation_configurations import (
     SimulationConfiguration,
 )
-from src.controller.control_input import ControlInput
 from src.environment.environment import Environment
 import jax.numpy as jnp
 import numpy as np
@@ -62,7 +61,6 @@ def render_saved_controller(controller_path: str):
         robot_pos = obs["disk_position"][0:2]
 
         deltas = jnp.array(control_inputs[i]) - robot_pos
-        prev_pos = robot_pos
         distance = jnp.linalg.norm(deltas)
         if distance < STOP_THRESHOLD:
             i += 1

@@ -3,20 +3,20 @@ import threading
 import time
 
 import cv2
-import numpy as np
+import jax.numpy as jnp
 
 from configs.config import Configuration
 from configs.subconfiguration_map import SubConfigurationMap
-from configs.subcontrollers.controller.controller_configurations import ControllerConfiguration
-from configs.subcontrollers.cpg.cpg_configurations import CPGConfiguration
-from configs.subcontrollers.genetic.genetic_configurations import GeneticConfiguration
-from configs.subcontrollers.logger.logger import Logger
-from configs.subcontrollers.random.random_configurations import RandomConfiguration
-from configs.subcontrollers.simulation.simulation_configurations import SimulationConfiguration
+from configs.subconfigurations.controller.controller_configurations import (ControllerConfiguration,)
+from configs.subconfigurations.cpg.cpg_configurations import CPGConfiguration
+from configs.subconfigurations.genetic.genetic_configurations import GeneticConfiguration
+from configs.subconfigurations.logger.logger import Logger
+from configs.subconfigurations.random.random_configurations import RandomConfiguration
+from configs.subconfigurations.simulation.simulation_configurations import SimulationConfiguration
 from src.environment.environment import Environment
 
+# Generated using Claude https://claude.ai/share/02789b94-ab47-40c2-9985-9b4de5c19e3a
 
-# ─── Joystick instellingen ────────────────────────────────────────────────────
 PANEL_SIZE = 300
 CENTER     = PANEL_SIZE // 2
 RADIUS     = 120
@@ -30,7 +30,6 @@ CENTER_COLOR = (100, 100, 100)
 TEXT_COLOR   = (200, 200, 200)
 ACCENT_COLOR = (0, 200, 255)
 
-# ─── Shared state ──────────────────────────────────────────────────────────────
 state_lock = threading.Lock()
 frame_lock = threading.Lock()
 
@@ -40,14 +39,13 @@ _latest_frame = None
 _running = True
 
 
-# ─── Mouse input ───────────────────────────────────────────────────────────────
 def mouse_callback(event, x, y, flags, param):
     global _dot_x, _dot_y, _control_input
 
     if event in (cv2.EVENT_LBUTTONDOWN, cv2.EVENT_MOUSEMOVE) and (flags & cv2.EVENT_FLAG_LBUTTON):
         dx = x - CENTER
         dy = y - CENTER
-        dist = float(np.hypot(dx, dy))
+        dist = float(jnp.hypot(dx, dy))
 
         if dist > RADIUS:
             scale = RADIUS / dist
@@ -59,7 +57,7 @@ def mouse_callback(event, x, y, flags, param):
         new_y = int(CENTER + dy)
 
         speed = dist / RADIUS
-        angle = float(np.arctan2(-dy, dx))
+        angle = float(jnp.arctan2(-dy, dx))
 
         with state_lock:
             _dot_x, _dot_y = new_x, new_y
@@ -71,9 +69,8 @@ def mouse_callback(event, x, y, flags, param):
             _control_input = (0.0, 0.0)
 
 
-# ─── Joystick rendering ───────────────────────────────────────────────────────
 def draw_joystick_panel(dot_x, dot_y, speed, angle_deg):
-    panel = np.full((PANEL_SIZE, PANEL_SIZE, 3), BG_COLOR, dtype=np.uint8)
+    panel = jnp.full((PANEL_SIZE, PANEL_SIZE, 3), BG_COLOR, dtype=jnp.uint8)
 
     cv2.circle(panel, (CENTER, CENTER), RADIUS, RING_COLOR, 2)
     cv2.circle(panel, (CENTER, CENTER), RADIUS // 2, RING_COLOR2, 1)
@@ -99,7 +96,6 @@ def draw_joystick_panel(dot_x, dot_y, speed, angle_deg):
     return panel
 
 
-# ─── Simulation thread ─────────────────────────────────────────────────────────
 def simulation_loop(env, configuration, env_state):
     global _latest_frame, _running
 
@@ -126,10 +122,9 @@ def simulation_loop(env, configuration, env_state):
 
         if frame is not None:
             with frame_lock:
-                _latest_frame = np.asarray(frame, dtype=np.uint8)
+                _latest_frame = jnp.asarray(frame, dtype=jnp.uint8)
 
 
-# ─── Main UI loop ──────────────────────────────────────────────────────────────
 def simulate_controller_joystick(output_path: str):
     global _running
 
@@ -181,7 +176,7 @@ def simulate_controller_joystick(output_path: str):
         panel = draw_joystick_panel(
             dot_x, dot_y,
             speed,
-            float(np.degrees(angle))
+            float(jnp.degrees(angle))
         )
 
         cv2.imshow("Joystick", panel)

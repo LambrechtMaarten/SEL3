@@ -1,9 +1,9 @@
-from enum import Enum
+import jax.numpy as jnp
 
+class ControlInput:
+    def __init__(self, speed: float, angle: float):
+        if speed < 0:
+            raise ValueError("Speed must be >= 0")
 
-class ControlInput(Enum):
-    UP = 0
-    DOWN = 1
-    LEFT = 2
-    RIGHT = 3
-    WAIT = 4
+        self.speed = speed
+        self.angle = angle % (jnp.pi*2)

@@ -130,7 +130,7 @@ class NNControllerPretrain(BaseNNController):
                 relative_angle = angle - env_state.observations["disk_rotation"][2]
                 local_angle, k = self.to_local_angle_and_sector(relative_angle);
 
-                obs = self.build_obs_angle(env_state, local_angle, k, speed)
+                obs = self.build_obs_angle(env_state.observations, local_angle, k, speed)
 
                 cpg_state = cpg.step(cpg_state)
                 joint_actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
@@ -181,7 +181,7 @@ class NNControllerPretrain(BaseNNController):
         if self.params is None:
             rng, init_key = jax.random.split(rng)
             dummy_env = env.reset(init_key)
-            dummy_input = self.build_obs_angle(dummy_env, 0.0)
+            dummy_input = self.build_obs_angle(dummy_env.observations, 0.0)
             rng, init_key2 = jax.random.split(rng)
             self.params = self.model.init(init_key2, dummy_input)
 
