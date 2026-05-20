@@ -17,7 +17,9 @@ class SilentLogger(Logger):
     def log_configuration(self):
         pass
 
-    def log_genetic_generation(self, population: jarr, selections: jarr, evaluations: jarr, generation: int):
+    def log_genetic_generation(
+        self, population: jarr, selections: jarr, evaluations: jarr, generation: int
+    ):
         pass
 
     def log_video(self, frames, name):

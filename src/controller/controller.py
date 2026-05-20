@@ -1,3 +1,5 @@
+"""Abstract base class defining the interface for all brittle star robot controllers."""
+
 from abc import ABC, abstractmethod
 from typing import Callable
 
@@ -11,11 +13,11 @@ from src.jax_extra.jax_extra import jarr
 
 
 class Controller(ABC):
-    """
-    The controller implements all function that determine how the brittle star behaves for user input.
-    This includes the training function for the genetic algorithm (with genome size) and functions to
-    train the controller from a genetic selection.
-    The controller also has functions to write itself to or read itself from files.
+    """Abstract base class for all brittle star robot controllers.
+
+    A controller determines how the brittle star behaves in response to user
+    input. Concrete subclasses must implement the locomotion logic, a fitness
+    evaluator for the genetic algorithm, serialization, and deserialization.
     """
 
     @abstractmethod
@@ -26,30 +28,60 @@ class Controller(ABC):
         configuration: Configuration,
         env_state: BaseEnvState,
     ) -> CPGState:
-        pass
+        """Compute joint actions for the current simulation step.
 
-    @abstractmethod
-    def train_controller(
-        self,
-        genetic_selections: jarr,
-        genetic_evaluations: jarr,
-        configuration: Configuration,
-    ):
-        pass
+        Args:
+            cpg_state: Current state of the Central Pattern Generator.
+            control_input: High-level locomotion command (angle and speed).
+            configuration: Global simulation and training configuration.
+            env_state: Current MuJoCo environment state including observations.
+
+        Returns:
+            Updated CPG state or a JAX array of joint torques, depending on
+            the concrete controller implementation.
+        """
 
     @staticmethod
     @abstractmethod
     def evaluator(configuration: Configuration, rng) -> Callable[[jarr], jarr]:
-        pass
+        """Return a fitness evaluator function for use with genetic optimization.
+
+        The returned callable maps a batch of genomes (JAX arrays) to scalar
+        fitness scores.
+
+        Args:
+            configuration: Global simulation and training configuration.
+            rng: JAX random key used to seed environment resets.
+
+        Returns:
+            A callable that accepts a genome array and returns fitness scores.
+        """
 
     @abstractmethod
     def genome_size(self, configuration: Configuration) -> int:
-        pass
+        """Return the number of parameters (genes) in a single genome.
+
+        Args:
+            configuration: Global simulation and training configuration.
+
+        Returns:
+            Integer genome length expected by the genetic optimizer.
+        """
 
     @abstractmethod
-    def save_controller(self, logger: Logger):
-        pass
+    def save_controller(self, logger: Logger, name: str = "controller"):
+        """Persist the controller's learned parameters via the logger.
+
+        Args:
+            logger: Logger instance used to write controller data to disk or
+                a remote tracking service.
+            name: Filename stem used when writing to disk.
+        """
 
     @abstractmethod
     def read_controller(self, path: str):
-        pass
+        """Load controller parameters from a previously saved file.
+
+        Args:
+            path: Filesystem path to the saved controller file.
+        """

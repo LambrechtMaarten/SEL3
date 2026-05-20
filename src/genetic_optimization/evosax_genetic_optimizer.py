@@ -1,3 +1,5 @@
+"""Genetic optimizer wrapping the EvoSax SNES evolutionary strategy."""
+
 from typing import Any, Tuple
 
 import jax
@@ -37,9 +39,7 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
         self.es = None
         self.params = None
 
-    def select(
-        self, population: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def select(self, population: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         """Updates the EvoSax strategy with fitness evaluations.
 
         Initializes the EvoSax strategy on the first call using the
@@ -63,10 +63,10 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
         if self.es is None:
             population_size = population.shape[0]
 
-            # Gebruik het gemiddelde van de populatie als startpunt
-            # zodat pre-getrainde gewichten effectief worden gebruikt
-            # als warm start. Bij random initialisatie is dit gewoon
-            # het gemiddelde van een normale verdeling ≈ 0.
+            # Use the mean of the population as the starting point so that
+            # pre-trained weights are effectively used as a warm start.
+            # For random initialisation this is simply the mean of a normal
+            # distribution ≈ 0.
             solution = jnp.mean(population, axis=0)
 
             self.es = ES(
@@ -85,9 +85,7 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
         new_state, metrics = self.es.tell(rng, population, fitness, state, self.params)
         return population, new_state
 
-    def reproduce(
-        self, genomes: jarr, evaluations: jarr, rng, state
-    ) -> Tuple[jarr, Any]:
+    def reproduce(self, genomes: jarr, evaluations: jarr, rng, state) -> Tuple[jarr, Any]:
         """Samples a new population from the updated EvoSax strategy.
 
         Args:

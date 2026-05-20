@@ -1,21 +1,37 @@
-import os
-import time
+"""Training script that builds a map-elites CPG gait archive."""
+
 from pathlib import Path
 
 import jax
 import numpy as np
-from fontTools.ufoLib import convertFontInfoValueForAttributeFromVersion2ToVersion1
 
 from configs.config import Configuration
 from configs.subconfigurations.controller.controller_configurations import ControllerConfiguration
-from src.controller.control_input import ControlInput
 from src.controller.one_direction_map_elites_controller import OneDirectionMapElitesController
 from src.environment.environment import Environment
-from src.jax_extra.jax_extra import jarr
 
 
 def train_archive(configuration: Configuration):
-    configuration.controller = ControllerConfiguration("map elites", OneDirectionMapElitesController())
+    """Run the map-elites genetic optimisation and save the resulting gait archive.
+
+    Overrides the controller in the provided configuration with a
+    :class:`OneDirectionMapElitesController`, runs the genetic optimizer for
+    the configured number of generations, and saves the archive artefacts
+    (groups, joint-position edges, genome selections, and fitness evaluations)
+    to ``<logger.base_folder>/archive/``.
+
+    Args:
+        configuration: Global simulation and training configuration.  The
+            controller sub-configuration is overwritten internally.
+
+    Returns:
+        Tuple of (groups, edges) where ``groups`` is an integer array of
+        behavioural bin indices and ``edges`` is a joint-position trajectory
+        array of shape ``(N, 800, 30)``.
+    """
+    configuration.controller = ControllerConfiguration(
+        "map elites", OneDirectionMapElitesController()
+    )
     configuration.controller.set_configuration(configuration)
 
     configuration.logger.init_logger()
@@ -43,16 +59,19 @@ def train_archive(configuration: Configuration):
     get_edges = jax.jit(controller.get_edges(configuration, configuration.random.split()))
     x_positions, groups, edges = get_edges(selections)
 
-    # Sla het archief op zodat het gebruikt kan worden voor pretraining
+    # Save the archive so it can be used for pre-training
     archive_dir = Path(configuration.logger.base_folder) / "archive"
     archive_dir.mkdir(parents=True, exist_ok=True)
 
     np.save(archive_dir / "x_positions.npy", np.array(x_positions))
     np.save(archive_dir / "edges.npy", np.array(edges))
     np.save(archive_dir / "selections.npy", np.array(selections))
-    np.save(archive_dir / "evaluations.npy", np.array(evaluations[1] if isinstance(evaluations, tuple) else evaluations))
+    np.save(
+        archive_dir / "evaluations.npy",
+        np.array(evaluations[1] if isinstance(evaluations, tuple) else evaluations),
+    )
 
-    print(f"Archief opgeslagen in: {archive_dir}")
+    print(f"Archive saved to: {archive_dir}")
     print(f"  x_positions.npy     — shape {np.array(x_positions).shape}")
     print(f"  edges.npy      — shape {np.array(edges).shape}")
     print(f"  selections.npy — shape {np.array(selections).shape}")

@@ -9,11 +9,8 @@ class GeneticConfiguration(SubConfiguration):
     """
 
     def __init__(
-            self,
-            name: str,
-            population_size: int,
-            generations: int,
-            genetic_optimizer: GeneticOptimizer):
+        self, name: str, population_size: int, generations: int, genetic_optimizer: GeneticOptimizer
+    ):
         super().__init__(name)
         self.population_size = population_size
         self.number_of_generations = generations

@@ -1,0 +1,61 @@
+site_name: SEL3 - Groep 3 - Brittle Star Robot
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            docstring_style: google
+
+nav:
+  - Home: index.md
+  - src:
+    - main: src/main.md
+    - controller:
+      - controller: src/controller/controller.md
+      - BaseNNController: src/controller/BaseNNController.md
+      - NN_controller_pretrain: src/controller/NN_controller_pretrain.md
+      - NN_controller_angle: src/controller/NN_controller_angle.md
+      - one_direction_controller: src/controller/one_direction_controller.md
+      - one_direction_map_elites_controller: src/controller/one_direction_map_elites_controller.md
+      - control_input: src/controller/control_input.md
+    - cpg:
+      - cpg: src/cpg/cpg.md
+      - cpg_state: src/cpg/cpg_state.md
+      - cpg_generators:
+        - cpg_generators: src/cpg/cpg_generators/cpg_generators.md
+        - fully_connected_cpg_generator: src/cpg/cpg_generators/fully_connected_cpg_generator.md
+        - fully_connected_symmetric_cpg_generator: src/cpg/cpg_generators/fully_connected_symmetric_cpg_generator.md
+        - basic_cpg_generator: src/cpg/cpg_generators/basic_cpg_generator.md
+    - environment:
+      - environment: src/environment/environment.md
+    - genetic_optimization:
+      - genetic_optimization: src/genetic_optimization/genetic_optimization.md
+      - basic_genetic_optimizer: src/genetic_optimization/basic_genetic_optimizer.md
+      - crossover_genetic_optimizer: src/genetic_optimization/crossover_genetic_optimizer.md
+      - evosax_genetic_optimizer: src/genetic_optimization/evosax_genetic_optimizer.md
+      - random_genetic_optimizer: src/genetic_optimization/random_genetic_optimizer.md
+      - variance_genetic_optimizer: src/genetic_optimization/variance_genetic_optimizer.md
+    - jax_extra:
+      - jax_extra: src/jax_extra/jax_extra.md
+    - numerical_analysis:
+      - numerical_analysis: src/numerical_analysis/numerical_analysis.md
+      - euler_solver: src/numerical_analysis/euler_solver.md
+      - rk4_solver: src/numerical_analysis/rk4_solver.md
+    - render:
+      - render: src/render/render.md
+      - render_video: src/render/render_video.md
+    - simulation:
+      - simulate_controller: src/simulation/simulate_controller.md
+      - robot_controller: src/simulation/robot_controller.md
+    - training:
+      - train_archive: src/training/train_archive.md

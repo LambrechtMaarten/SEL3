@@ -34,15 +34,9 @@ def tst(path: str):
         SubConfigurationMap.get_configuration_from_json(
             configuration_json, SimulationConfiguration
         ),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, CPGConfiguration
-        ),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, RandomConfiguration
-        ),
-        SubConfigurationMap.get_configuration_from_json(
-            configuration_json, GeneticConfiguration
-        ),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, CPGConfiguration),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, RandomConfiguration),
+        SubConfigurationMap.get_configuration_from_json(configuration_json, GeneticConfiguration),
         SubConfigurationMap.get_configuration_from_json(
             configuration_json, ControllerConfiguration
         ),
@@ -65,12 +59,8 @@ def tst(path: str):
             selections.append(values[i])
             i += 1
 
-    populations = jnp.array(populations).reshape(
-        generations, population_size, genome_size
-    )
-    selections = jnp.array(selections).reshape(
-        generations, population_size // 2, genome_size
-    )
+    populations = jnp.array(populations).reshape(generations, population_size, genome_size)
+    selections = jnp.array(selections).reshape(generations, population_size // 2, genome_size)
     evaluations = jnp.array(evaluations).reshape(generations, population_size)
 
     all_genomes = jnp.vstack(populations)
@@ -120,9 +110,7 @@ def tst(path: str):
         plt.gca().get_xaxis().set_visible(False)
         plt.gca().get_yaxis().set_visible(False)
 
-        plt.scatter(
-            pop_points[:, 0], pop_points[:, 1], c="blue", s=40, label="Population"
-        )
+        plt.scatter(pop_points[:, 0], pop_points[:, 1], c="blue", s=40, label="Population")
 
         plt.scatter(
             sel_points[:, 0],

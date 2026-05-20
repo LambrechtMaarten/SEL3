@@ -16,7 +16,4 @@ def register():
         SilentLogger(),
     )
 
-    SubConfigurationMap.add_configuration(
-        Logger,
-        WandbLogger()
-    )
+    SubConfigurationMap.add_configuration(Logger, WandbLogger())

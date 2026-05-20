@@ -1,6 +1,9 @@
-from biorobot.brittle_star.environment.undirected_locomotion.shared import \
-    BrittleStarUndirectedLocomotionEnvironmentConfiguration
-from biorobot.brittle_star.mjcf.morphology.specification.specification import BrittleStarMorphologySpecification
+from biorobot.brittle_star.environment.undirected_locomotion.shared import (
+    BrittleStarUndirectedLocomotionEnvironmentConfiguration,
+)
+from biorobot.brittle_star.mjcf.morphology.specification.specification import (
+    BrittleStarMorphologySpecification,
+)
 from moojoco.mjcf.arena import ArenaConfiguration
 
 from configs.subconfiguration import SubConfiguration
@@ -14,12 +17,13 @@ class SimulationConfiguration(SubConfiguration):
     """
 
     def __init__(
-            self,
-            name: str,
-            solver: DifferentialEquationSolver,
-            environment_configuration: BrittleStarUndirectedLocomotionEnvironmentConfiguration,
-            arena_configuration: ArenaConfiguration,
-            morphology_configuration: BrittleStarMorphologySpecification):
+        self,
+        name: str,
+        solver: DifferentialEquationSolver,
+        environment_configuration: BrittleStarUndirectedLocomotionEnvironmentConfiguration,
+        arena_configuration: ArenaConfiguration,
+        morphology_configuration: BrittleStarMorphologySpecification,
+    ):
         super().__init__(name)
         self.solver = solver
         self.environment_configuration = environment_configuration
