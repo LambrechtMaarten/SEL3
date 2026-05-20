@@ -90,7 +90,7 @@ def train_archive(configuration: Configuration):
             actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
             env_state = env.step(actions, env_state)
             frames.append(env.render(env_state))
-        configuration.logger.log_video(frames, f'video_{groups[i]}.mp4')
+        configuration.logger.log_video(frames, f"video_{groups[i]}.mp4")
         seen_groups.append(groups[i])
 
     return x_positions, edges

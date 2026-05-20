@@ -90,7 +90,15 @@ class OneDirectionMapElitesController(Controller):
                         env_state,
                     )
                     max_force = env.action_space.high[0]
-                    energy += jnp.sum(jnp.pow(max_force, 2) - jnp.pow(jnp.clip(jnp.abs(env_state.observations["actuator_force"]), a_max=max_force), 2))
+                    energy += jnp.sum(
+                        jnp.pow(max_force, 2)
+                        - jnp.pow(
+                            jnp.clip(
+                                jnp.abs(env_state.observations["actuator_force"]), a_max=max_force
+                            ),
+                            2,
+                        )
+                    )
                     return cpg_state, env_state, energy
 
                 cpg_state, env_state, energy = jax.lax.fori_loop(
@@ -118,7 +126,7 @@ class OneDirectionMapElitesController(Controller):
                 jnp.where(groups[:, None] == groups[None, :], scores, -jnp.inf), axis=1
             )
             rescaled_scores = scores / max_scores_in_group
-            rescaled_scores = rescaled_scores * (.99**group_sizes)
+            rescaled_scores = rescaled_scores * (0.99**group_sizes)
             jax.debug.log("{y}", y=groups)
             jax.debug.log("{y}", y=scores)
 
@@ -127,7 +135,7 @@ class OneDirectionMapElitesController(Controller):
         return evaluator
 
     @staticmethod
-    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr,jarr]]:
+    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr, jarr]]:
         """Return a function that evaluates genomes and collects per-step joint positions.
 
         Used after optimisation to record the joint-position trajectories
@@ -145,7 +153,7 @@ class OneDirectionMapElitesController(Controller):
             ``(N, 800, 30)``.
         """
 
-        def evaluator(arr: jarr) -> Tuple[jarr,jarr]:
+        def evaluator(arr: jarr) -> Tuple[jarr, jarr]:
             env = Environment(configuration)
 
             def _evaluator(_arr: jarr, _rng: jarr) -> tuple[Any, Any, Any, Any]:
@@ -161,18 +169,49 @@ class OneDirectionMapElitesController(Controller):
                     cpg_state = cpg.step(cpg_state)
                     actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
                     max_force = env.action_space.high[0]
-                    energy += jnp.sum(jnp.pow(max_force, 2) - jnp.pow(jnp.clip(jnp.abs(env_state.observations["actuator_force"]), a_max=max_force), 2))
+                    energy += jnp.sum(
+                        jnp.pow(max_force, 2)
+                        - jnp.pow(
+                            jnp.clip(
+                                jnp.abs(env_state.observations["actuator_force"]), a_max=max_force
+                            ),
+                            2,
+                        )
+                    )
                     env_state = env.step(
                         actions,
                         env_state,
                     )
 
-                    return i+1, cpg_state, env_state, energy, edges.at[i].set(env_state.observations["joint_position"])
+                    return (
+                        i + 1,
+                        cpg_state,
+                        env_state,
+                        energy,
+                        edges.at[i].set(env_state.observations["joint_position"]),
+                    )
 
                 i, cpg_state, env_state, energy, edges = jax.lax.fori_loop(
-                    0, max_steps, step_fn, (0, cpg_state, env_state, 0, jnp.broadcast_to(env_state.observations["joint_position"], (800,) + env_state.observations["joint_position"].shape))
+                    0,
+                    max_steps,
+                    step_fn,
+                    (
+                        0,
+                        cpg_state,
+                        env_state,
+                        0,
+                        jnp.broadcast_to(
+                            env_state.observations["joint_position"],
+                            (800,) + env_state.observations["joint_position"].shape,
+                        ),
+                    ),
                 )
-                return energy, env_state.observations["disk_position"][0], env_state.observations["disk_position"][1], edges
+                return (
+                    energy,
+                    env_state.observations["disk_position"][0],
+                    env_state.observations["disk_position"][1],
+                    edges,
+                )
 
             new_rngs = jax.random.split(rng, len(arr))
             energies, x_poss, y_poss, edges = jax.vmap(_evaluator)(arr, new_rngs)
@@ -181,7 +220,6 @@ class OneDirectionMapElitesController(Controller):
             return groups, edges
 
         return evaluator
-
 
     def genome_size(self, configuration: Configuration) -> int:
         """Return the number of genes in a single CPG body genome.

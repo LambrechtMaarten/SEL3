@@ -62,6 +62,7 @@ def plot_pairs(pairs):
 
     plt.show()
 
+
 def plot_pairs2(pairs):
     n = len(pairs)
     plt.figure(figsize=(8, 5))
@@ -74,11 +75,16 @@ def plot_pairs2(pairs):
         color = (t, 0, 1 - t)
 
         i = i + 1
-        plt.scatter(x_best, y_best, marker='o', color=color, alpha=1
-                    ,label=i if i % 10 == 0 else ("..." if i % 10 == 6 else None)
-                    )
+        plt.scatter(
+            x_best,
+            y_best,
+            marker="o",
+            color=color,
+            alpha=1,
+            label=i if i % 10 == 0 else ("..." if i % 10 == 6 else None),
+        )
 
-    plt.title(f'map elites: {len(pairs)} generations')
+    plt.title(f"map elites: {len(pairs)} generations")
     plt.xlabel("speed")
     plt.ylabel("efficiency (logarithmic scale)")
     plt.grid(True)
