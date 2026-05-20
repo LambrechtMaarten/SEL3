@@ -29,16 +29,14 @@ def train_archive(configuration: Configuration):
         behavioural bin indices and ``edges`` is a joint-position trajectory
         array of shape ``(N, 800, 30)``.
     """
-    configuration.controller = ControllerConfiguration(
-        "map elites", OneDirectionMapElitesController()
-    )
+    controller = OneDirectionMapElitesController()
+    configuration.controller = ControllerConfiguration("map elites", controller)
     configuration.controller.set_configuration(configuration)
 
     configuration.logger.init_logger()
     configuration.logger.log_configuration()
 
     genetic_optimizer = configuration.genetic.genetic_optimizer
-    controller = configuration.controller.controller
 
     starting_population = genetic_optimizer.initialize_population(
         configuration.genetic.population_size,
@@ -55,7 +53,6 @@ def train_archive(configuration: Configuration):
         configuration.logger,
     )
 
-    controller: OneDirectionMapElitesController = configuration.controller.controller
     get_edges = jax.jit(controller.get_edges(configuration, configuration.random.split()))
     x_positions, groups, edges = get_edges(selections)
 
@@ -76,6 +73,7 @@ def train_archive(configuration: Configuration):
     print(f"  edges.npy      — shape {np.array(edges).shape}")
     print(f"  selections.npy — shape {np.array(selections).shape}")
 
+    # create a video of a brittle start for every group in the archive
     seen_groups = []
     for i in range(len(groups)):
         if groups[i] in seen_groups:

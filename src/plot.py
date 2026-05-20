@@ -9,7 +9,6 @@ def parse_arrays_from_file(filename):
     with open(filename, "r") as f:
         content = f.read()
 
-    # Extract all [ ... ] blocks
     blocks = re.findall(r"\[.*?\]", content, re.DOTALL)
 
     arrays = []
@@ -17,7 +16,6 @@ def parse_arrays_from_file(filename):
         numbers = list(map(float, re.findall(r"-?\d+\.?\d*e?\+?\d*", block)))
         arrays.append(np.array(numbers))
 
-    # Pair consecutive arrays
     pairs = [(arrays[i], arrays[i + 1]) for i in range(0, len(arrays), 2)]
     return pairs
 
@@ -89,8 +87,6 @@ def plot_pairs2(pairs):
     plt.show()
 
 
-# Usage
 pairs = parse_arrays_from_file("tmp4")
 plot_pairs(pairs)
-
 plot_pairs2(pairs)

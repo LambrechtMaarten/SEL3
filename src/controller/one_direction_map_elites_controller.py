@@ -1,5 +1,3 @@
-"""CPG-based map-elites controller that builds a diverse archive of locomotion gaits."""
-
 from typing import Any, Callable, Tuple
 
 import jax
@@ -129,7 +127,7 @@ class OneDirectionMapElitesController(Controller):
         return evaluator
 
     @staticmethod
-    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr,jarr,jarr]]:
+    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr,jarr]]:
         """Return a function that evaluates genomes and collects per-step joint positions.
 
         Used after optimisation to record the joint-position trajectories
@@ -147,7 +145,7 @@ class OneDirectionMapElitesController(Controller):
             ``(N, 800, 30)``.
         """
 
-        def evaluator(arr: jarr) -> Tuple[jarr,jarr,jarr]:
+        def evaluator(arr: jarr) -> Tuple[jarr,jarr]:
             env = Environment(configuration)
 
             def _evaluator(_arr: jarr, _rng: jarr) -> tuple[Any, Any, Any, Any]:
@@ -205,7 +203,6 @@ class OneDirectionMapElitesController(Controller):
             logger: Logger instance (standard or wandb).
             name: Unused; present for interface compatibility.
         """
-        # Standard logger needs string, but wandb does not :(
         # noinspection PyTypeChecker
         logger.log_controller(jnp.array_str(self.body_cpg))
 
