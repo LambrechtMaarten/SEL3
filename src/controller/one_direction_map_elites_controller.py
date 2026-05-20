@@ -56,12 +56,12 @@ class OneDirectionMapElitesController(Controller):
                     cpg_state, env_state, energy = val
                     cpg_state = cpg.step(cpg_state)
                     actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
-                    max_force = env.action_space.high[0]
-                    energy += jnp.sum(jnp.pow(max_force - jnp.clip(jnp.abs(actions), a_max=max_force), 2))
                     env_state = env.step(
                         actions,
                         env_state,
                     )
+                    max_force = env.action_space.high[0]
+                    energy += jnp.sum(jnp.pow(max_force, 2) - jnp.pow(jnp.clip(jnp.abs(env_state.observations["actuator_force"]), a_max=max_force), 2))
                     return cpg_state, env_state, energy
 
                 cpg_state, env_state, energy = jax.lax.fori_loop(
@@ -71,23 +71,23 @@ class OneDirectionMapElitesController(Controller):
 
             new_rngs = jax.random.split(rng, len(arr))
             energies, x_poss, y_poss = jax.vmap(_evaluator)(arr, new_rngs)
-            scores = energies
+            scores = energies / jnp.abs(x_poss)
 
             groups = jnp.floor(x_poss * 5).astype(int)
             group_sizes = jnp.count_nonzero(jnp.equal(groups,jnp.repeat(groups, groups.shape[0]).reshape((groups.shape[0], groups.shape[0]))), axis=0)
             max_scores_in_group = jnp.max(jnp.where(groups[:, None] == groups[None, :], scores, -jnp.inf), axis=1)
             rescaled_scores = scores / max_scores_in_group
             rescaled_scores = rescaled_scores * (.99 ** group_sizes)
-            # jax.debug.log("{y}", y=groups)
-            # jax.debug.log("{y}", y=scores)
+            jax.debug.log("{y}", y=groups)
+            jax.debug.log("{y}", y=scores)
 
-            return rescaled_scores, scores
+            return rescaled_scores
 
         return evaluator
 
     @staticmethod
-    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr,jarr]]:
-        def evaluator(arr: jarr) -> Tuple[jarr,jarr]:
+    def get_edges(configuration: Configuration, rng) -> Callable[[jarr], Tuple[jarr,jarr,jarr]]:
+        def evaluator(arr: jarr) -> Tuple[jarr,jarr,jarr]:
             env = Environment(configuration)
 
             def _evaluator(_arr: jarr, _rng: jarr) -> tuple[Any, Any, Any, Any]:
@@ -102,7 +102,8 @@ class OneDirectionMapElitesController(Controller):
                     i, cpg_state, env_state, energy, edges = val
                     cpg_state = cpg.step(cpg_state)
                     actions = cpg_generator.outputs_to_actions(cpg_state.outputs, configuration)
-                    energy += jnp.sum((env.action_space.high[0] - jnp.clip(jnp.abs(actions), a_max=env.action_space.high[0])) ** 2)
+                    max_force = env.action_space.high[0]
+                    energy += jnp.sum(jnp.pow(max_force, 2) - jnp.pow(jnp.clip(jnp.abs(env_state.observations["actuator_force"]), a_max=max_force), 2))
                     env_state = env.step(
                         actions,
                         env_state,
@@ -119,7 +120,7 @@ class OneDirectionMapElitesController(Controller):
             energies, x_poss, y_poss, edges = jax.vmap(_evaluator)(arr, new_rngs)
             groups = jnp.floor(x_poss * 5).astype(int)
 
-            return groups, edges
+            return x_poss, groups, edges
 
         return evaluator
 

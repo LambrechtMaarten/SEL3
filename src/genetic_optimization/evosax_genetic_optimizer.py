@@ -72,7 +72,7 @@ class EvoSaxGeneticOptimizer(GeneticOptimizer):
             self.es = ES(
                 population_size=population_size,
                 solution=solution,
-                optimizer=optax.adam(learning_rate=0.05),
+                optimizer= optax.adam(learning_rate=0.1),
             )
 
             self.params = self.es.default_params.replace(std_init=0.01)

@@ -44,16 +44,16 @@ if __name__ == "__main__":
 
     if sys.argv[1] == "map-elites":
         configuration = Configuration(
-            SubConfigurationMap.get_configuration(Logger, "standard"),
+            SubConfigurationMap.get_configuration(Logger, "wandb"),
             SubConfigurationMap.get_configuration(SimulationConfiguration, "standard"),
             SubConfigurationMap.get_configuration(CPGConfiguration, "symmetric"),
             SubConfigurationMap.get_configuration(RandomConfiguration, "standard"),
             SubConfigurationMap.get_configuration(GeneticConfiguration, "map elites"),
             SubConfigurationMap.get_configuration(ControllerConfiguration, "map elites"),
         )
-        groups, edges = train_archive(configuration)
+        x_positions, edges = train_archive(configuration)
         jax.debug.log("{x}",x=edges)
-        jax.debug.log("{x}",x=groups)
+        jax.debug.log("{x}",x=x_positions)
 
     elif sys.argv[1] == "train_network":
         if len(sys.argv) < 3:
