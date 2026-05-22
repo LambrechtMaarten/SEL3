@@ -25,7 +25,6 @@ nav:
       - BaseNNController: src/controller/BaseNNController.md
       - NN_controller_pretrain: src/controller/NN_controller_pretrain.md
       - NN_controller_angle: src/controller/NN_controller_angle.md
-      - one_direction_controller: src/controller/one_direction_controller.md
       - one_direction_map_elites_controller: src/controller/one_direction_map_elites_controller.md
       - control_input: src/controller/control_input.md
     - cpg:
