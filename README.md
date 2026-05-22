@@ -64,4 +64,4 @@ explores how evolved behavioural repertoires can serve as effective priors for l
 adaptable control policies in complex robotic systems.
 
 ## Poster
-<img width="1768" height="2500" alt="brittle_star_poster" src="https://github.ugent.be/user-attachments/assets/157cdadd-84d0-4cc9-94e1-2e03652e129b" />
+<img width="1768" height="2500" alt="brittle_star_poster" src="https://github.com/user-attachments/assets/2cf46de1-ed9c-4829-8f88-efeab9b3702a" />
